@@ -35,8 +35,13 @@
 
 ## 测试与验证
 
-- 项目尚未初始化，当前没有可执行的 lint、typecheck、test 或 build 命令。
-- 后续建立工具链后，应在本节记录准确命令。
+- 安装依赖：`npm install`
+- 启动开发环境：`npm run dev`
+- 类型检查：`npm run typecheck`
+- 生产构建：`npm run build`
+- 代码检查：`npm run lint`
+- 单次运行测试：`npm test`
+- 测试监听模式：`npm run test:watch`
 - 修改代码后必须运行项目已有的 lint、typecheck、test 和 build，并如实报告结果；不得静默吞掉错误。
 - 文档类改动应检查文件结构、链接、术语和项目范围是否一致。
 

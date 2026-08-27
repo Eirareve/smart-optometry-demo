@@ -1,0 +1,535 @@
+:root {
+  color: #e7f6f7;
+  background: #061316;
+  font-family:
+    Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", ui-sans-serif,
+    system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #061316;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-shell {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 clamp(1.25rem, 5vw, 5.5rem);
+  background:
+    linear-gradient(rgb(39 107 111 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(39 107 111 / 5%) 1px, transparent 1px),
+    radial-gradient(circle at 72% 28%, rgb(15 114 118 / 14%), transparent 30%),
+    #061316;
+  background-size: 48px 48px, 48px 48px, auto, auto;
+  isolation: isolate;
+}
+
+.ambient-glow {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+.ambient-glow--top {
+  top: -18rem;
+  right: -12rem;
+  width: 40rem;
+  height: 40rem;
+  background: radial-gradient(circle, rgb(23 137 139 / 15%), transparent 68%);
+}
+
+.ambient-glow--bottom {
+  bottom: -24rem;
+  left: -16rem;
+  width: 48rem;
+  height: 48rem;
+  background: radial-gradient(circle, rgb(8 91 101 / 11%), transparent 70%);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 86rem);
+  margin: 0 auto;
+  padding: 2rem 0;
+  border-bottom: 1px solid rgb(159 217 218 / 10%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.brand__mark {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgb(114 216 216 / 30%);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, rgb(18 93 97 / 40%), rgb(7 36 40 / 70%));
+  box-shadow: inset 0 0 1.25rem rgb(77 214 211 / 5%);
+}
+
+.brand__mark svg {
+  width: 1.75rem;
+  stroke: #6bdbd6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.brand__english,
+.section-kicker,
+.hero__eyebrow {
+  margin: 0;
+  color: #6f9194;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.brand h1 {
+  margin: 0.18rem 0 0;
+  color: #edfafa;
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.demo-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid rgb(76 210 205 / 25%);
+  border-radius: 999px;
+  color: #84d9d5;
+  background: rgb(14 76 79 / 26%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.demo-mode__pulse {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #4bd2cd;
+  box-shadow: 0 0 0.75rem #4bd2cd;
+}
+
+.home-main {
+  display: grid;
+  width: min(100%, 78rem);
+  flex: 1;
+  grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.8fr);
+  align-items: center;
+  gap: clamp(3rem, 8vw, 8rem);
+  margin: 0 auto;
+  padding: clamp(4rem, 9vh, 7rem) 0;
+}
+
+.hero {
+  max-width: 40rem;
+}
+
+.hero__eyebrow {
+  color: #45beba;
+}
+
+.hero h2 {
+  margin: 1.2rem 0 1.4rem;
+  color: #f3fbfb;
+  font-size: clamp(2.8rem, 6vw, 5.5rem);
+  font-weight: 300;
+  letter-spacing: -0.055em;
+  line-height: 1.03;
+}
+
+.hero h2 span {
+  display: block;
+  color: #6ed0cc;
+}
+
+.hero__description {
+  max-width: 33rem;
+  margin: 0;
+  color: #8da8aa;
+  font-size: clamp(0.95rem, 1.5vw, 1.08rem);
+  line-height: 1.8;
+}
+
+.primary-action {
+  margin-top: 2.5rem;
+}
+
+.primary-button,
+.secondary-button {
+  border: 0;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.primary-button {
+  display: inline-flex;
+  min-width: min(100%, 20rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.05rem 1.25rem 1.05rem 1.4rem;
+  border-radius: 0.85rem;
+  color: #799092;
+  background: linear-gradient(135deg, rgb(49 101 104 / 35%), rgb(20 55 59 / 55%));
+  box-shadow: inset 0 0 0 1px rgb(119 181 182 / 14%);
+  cursor: not-allowed;
+  font-weight: 650;
+}
+
+.button-arrow {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(122 173 175 / 12%);
+}
+
+.primary-action p {
+  margin: 0.75rem 0 0 0.2rem;
+  color: #536f72;
+  font-size: 0.78rem;
+}
+
+.device-card {
+  position: relative;
+  padding: clamp(1.4rem, 3vw, 2rem);
+  border: 1px solid rgb(122 198 198 / 13%);
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(145deg, rgb(17 48 52 / 88%), rgb(8 27 30 / 94%));
+  box-shadow:
+    0 2rem 6rem rgb(0 0 0 / 28%),
+    inset 0 1px rgb(255 255 255 / 3%);
+  backdrop-filter: blur(18px);
+}
+
+.device-card::before {
+  position: absolute;
+  top: 0;
+  left: 12%;
+  width: 76%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(92 209 207 / 42%), transparent);
+  content: "";
+}
+
+.device-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.device-card__header h2 {
+  margin: 0.35rem 0 0;
+  color: #eaf7f7;
+  font-size: 1.35rem;
+  font-weight: 580;
+}
+
+.status-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.7rem;
+  border: 1px solid rgb(205 167 93 / 24%);
+  border-radius: 999px;
+  color: #c9ad76;
+  background: rgb(113 76 20 / 15%);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.status-chip__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #c6a462;
+  box-shadow: 0 0 0.65rem rgb(198 164 98 / 70%);
+}
+
+.device-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgb(132 191 192 / 9%);
+  border-radius: 1rem;
+  background: rgb(3 19 22 / 28%);
+}
+
+.device-identity__icon {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.9rem;
+  color: #5ac7c4;
+  background: rgb(41 127 128 / 13%);
+}
+
+.device-icon {
+  width: 2rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.device-identity__name {
+  margin: 0;
+  color: #dceded;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.device-identity__id {
+  margin: 0.35rem 0 0;
+  color: #607d80;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.device-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: 0 0 1.5rem;
+}
+
+.device-detail {
+  padding: 0.2rem 1rem;
+}
+
+.device-detail:first-child {
+  padding-left: 0;
+  border-right: 1px solid rgb(132 191 192 / 10%);
+}
+
+.device-detail dt {
+  color: #587578;
+  font-size: 0.7rem;
+}
+
+.device-detail dd {
+  margin: 0.45rem 0 0;
+  color: #bcd0d1;
+  font-size: 0.88rem;
+  font-weight: 580;
+}
+
+.secondary-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.82rem 1rem;
+  border: 1px solid rgb(80 199 194 / 22%);
+  border-radius: 0.8rem;
+  color: #72ceca;
+  background: rgb(24 96 98 / 13%);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.secondary-button:hover {
+  border-color: rgb(80 199 194 / 42%);
+  background: rgb(24 96 98 / 24%);
+  transform: translateY(-1px);
+}
+
+.secondary-button:focus-visible {
+  outline: 3px solid rgb(91 210 205 / 30%);
+  outline-offset: 3px;
+}
+
+.button-plug {
+  position: relative;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1.5px solid currentColor;
+  border-radius: 0.2rem;
+}
+
+.button-plug::before,
+.button-plug::after {
+  position: absolute;
+  top: -0.3rem;
+  width: 1px;
+  height: 0.3rem;
+  background: currentColor;
+  content: "";
+}
+
+.button-plug::before {
+  left: 0.18rem;
+}
+
+.button-plug::after {
+  right: 0.18rem;
+}
+
+.connection-notice {
+  min-height: 1.15rem;
+  margin: 0.75rem 0 0;
+  color: #778f91;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.home-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 86rem);
+  margin: 0 auto;
+  padding: 1.25rem 0 1.75rem;
+  border-top: 1px solid rgb(159 217 218 / 8%);
+  color: #425f62;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+.prototype-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  letter-spacing: 0.02em;
+}
+
+.prototype-state > span {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #876f43;
+}
+
+@media (max-width: 850px) {
+  .home-main {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    padding: 4.5rem 0;
+  }
+
+  .hero {
+    text-align: center;
+  }
+
+  .hero__description {
+    margin-inline: auto;
+  }
+
+  .primary-action p {
+    margin-left: 0;
+  }
+
+  .device-card {
+    width: min(100%, 34rem);
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .home-shell {
+    padding-inline: 1rem;
+  }
+
+  .topbar {
+    padding: 1.25rem 0;
+  }
+
+  .brand__english {
+    display: none;
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .brand__mark {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .demo-mode {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.58rem;
+  }
+
+  .home-main {
+    padding: 3.5rem 0;
+  }
+
+  .hero h2 {
+    font-size: clamp(2.5rem, 13vw, 3.8rem);
+  }
+
+  .device-details {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .device-detail,
+  .device-detail:first-child {
+    padding: 0;
+    border-right: 0;
+  }
+
+  .home-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}
