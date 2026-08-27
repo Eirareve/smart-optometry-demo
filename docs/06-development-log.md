@@ -1,5 +1,161 @@
 # 开发日志
 
+## 2026-08-28 — MockDeviceAdapter 模拟设备实现
+
+### 本次目标
+
+在不修改现有 `DeviceAdapter` 总体架构的前提下，实现一台完整遵守 contract 的纯内存 Mock Device，并覆盖连接、单检测并发、按时间推进、取消、结果、17 项中性扩展指标和 `rawData`。
+
+### 完成内容
+
+- 新增 `MockDeviceAdapter implements DeviceAdapter`，提供连接、断开、设备快照、启动、取消、检测状态和完成结果。
+- 返回明确的 `MOCK-OPT-001` / `Smart Optometry Mock Device` 信息，所有状态与结果均标记 Mock/Demo，不包含真实厂家或型号。
+- 集中定义普通 Demo 与快速测试时间配置；默认检测按 1 秒准备、2 秒左眼、2 秒右眼、1 秒分析推进。
+- 用内存 Map 保存会话和终止状态，用 `activeExamId` 保证单设备只有一个活动检测。
+- 按查询时已耗时间推导 `preparing → left_eye → right_eye → analyzing → completed`，不创建阶段定时器或 Adapter 内轮询。
+- 实现取消及现有 5 个业务错误码；补充连接中断开时的竞态保护，旧连接请求不能覆盖 `disconnected`。
+- 生成指定 OD/OS Demo 数值、17 项 `metric_01`～`metric_17` 中性占位数据，以及明确标记 `source: mock` 的 `rawData`。
+- 新增 14 个 Mock 单元测试，并同步架构、设备接入与 API Contract 文档。
+
+### 我做出的决策
+
+- 现有 contract 没有类型错误，不修改 `DeviceAdapter`、领域类型或错误码集合。
+- `ready` 不属于当前 `DeviceStatus` 枚举；连接就绪继续使用契约规定的 `connected + idle`，并用 Mock/Demo 状态消息明确“已连接并就绪”。
+- `startExam()` 在返回 Promise 前同步完成检查、保存会话和占用设备，避免连续或并发调用创建第二个检测。
+- `completedAt` 固定为 `startedAt + 总配置时长`，不依赖第一次查询完成状态的时刻。
+- 检测中断开连接时将当前 Mock 会话安全终止为 `error`；这是 Demo 行为，不代表厂家设备规范。
+- 普通 UI 只应读取标准 `ExamResult` 字段，不得依赖 `rawData` 内部结构。
+
+### Codex 辅助内容
+
+- 完整复核项目规划、代理约束、架构、设备接入说明和 API Contract。
+- 实现 Mock、测试、统一导出和文档，并独立复查时间边界与连接/断开竞态。
+- 执行类型检查、代码检查、完整单元测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run typecheck`：通过。
+- `npm run lint`：通过。
+- `npm test`：通过；2 个测试文件、16 个测试全部通过，其中 MockDeviceAdapter 14 个测试。
+- `npm run build`：通过；Vite 完成 76 个模块转换。
+- Vitest 定向测试和首次生产构建在沙箱内曾因 Vite 子进程 `spawn EPERM` 无法启动；在获准的沙箱外环境重跑后均通过，该错误与代码或断言失败无关。
+
+### 未解决问题
+
+- Mock 尚未通过 Exam Service 接入 UI；本次未创建检测页、结果页、报告页或 Exam Service。
+- 真实硬件尚未接入，厂家 API、SDK、DLL、协议、设备错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+后续阶段可实现依赖 `DeviceAdapter` 抽象的 Exam Service，并由装配位置注入 `MockDeviceAdapter`。取得厂家正式资料后，新增 `RealDeviceAdapter` 实现同一契约，再在同一装配位置替换具体实现，UI 无需依赖具体 Adapter。
+
+## 2026-08-28 — DeviceAdapter 行为契约补充
+
+### 本次目标
+
+保持现有 `DeviceAdapter` 架构和方法签名不变，补充状态职责、单设备单检测、结果读取、取消、轮询、时间格式、`rawData` 用途和统一业务错误约束。
+
+### 完成内容
+
+- 新增简单的 `DeviceAdapterError` 和 5 个稳定业务错误码。
+- 为现有接口补充单次状态快照、唯一活动检测、取消终态和完成后取结果的必要注释。
+- 明确 `DeviceStatus` 只描述设备连接及整体空闲、忙碌、错误状态，`ExamStatus` 只描述单次检测阶段。
+- 明确全部时间字段继续使用 ISO 8601 `string`，`rawData` 继续使用 `unknown`。
+- 更新架构、API Contract、设备接入说明、技术决策和测试计划。
+
+### 我做出的决策
+
+- 不修改 `DeviceAdapter` 的 7 个方法、参数或返回类型，只增加可导出的业务错误类型。
+- 一台设备只能有一个活动检测；重复启动使用 `DEVICE_BUSY`，不创建第二个会话。
+- 只有 `completed` 检测可以返回结果，其他阶段使用 `EXAM_NOT_COMPLETED`。
+- 取消只适用于进行中检测，成功后状态为 `cancelled`；终止阶段使用 `EXAM_ALREADY_FINISHED`。
+- `getExamStatus()` 只返回一次快照；轮询由未来 Exam Service 负责，React 页面和 Adapter 不创建无限轮询。
+- 错误码属于我方业务契约，不映射或猜测厂家私有错误码。
+
+### Codex 辅助内容
+
+- 复核当前 contract、项目规划和未提交改动。
+- 补充错误类型、接口注释和相关文档，没有实现 Mock、Exam Service、页面或真实设备通讯。
+- 执行项目现有类型检查、代码检查、测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run typecheck`：通过。
+- `npm run lint`：通过。
+- `npm test`：通过；1 个测试文件、2 个测试全部通过。
+- `npm run build`：通过；Vite 完成 76 个模块转换。
+
+### 未解决问题
+
+- `MockDeviceAdapter` 与 Exam Service 尚未实现，因此并发、取消、结果和轮询规则目前是 contract 与文档约束，没有运行时行为。
+- 厂家接口、真实错误码和正式字段映射仍为 `TBD`。
+
+### 下一步
+
+未来实现 `MockDeviceAdapter` 时，用共享契约测试验证本阶段定义的业务规则；未获授权前不接入 UI 或真实设备。
+
+## 2026-08-28 — DeviceAdapter 设备抽象契约
+
+### 本次目标
+
+只建立与厂家设备解耦的 `DeviceAdapter` 接口和标准 TypeScript 类型，不实现 Mock、真实设备通讯、检测页或结果页。
+
+### 完成内容
+
+- 新增 `DeviceAdapter` 的连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取接口。
+- 新增 `DeviceInfo`、`DeviceStatus`、`ExamSession`、`ExamStatus`、`ExamResult`、`EyeRefraction`、`ExtendedMetric` 等领域类型。
+- 将设备、检测和结果类型分别放入 `src/domain/`，由统一入口导出，避免未来页面与 Adapter 重复定义。
+- 扩展指标使用 `metrics` 集合，不创建 17 个固定业务字段。
+- 将 `ExamResult.rawData` 设为必填 `unknown`，要求调用方缩窄类型后才能访问。
+- 明确单次检测的 `ExamStatus` 与未来 Exam Service 完整 UI 状态机的边界。
+- 新建内部 API Contract，并同步架构、设备接入、产品范围、技术决策、测试计划和 README 状态。
+
+### 我做出的决策
+
+- 把设备连接状态与运行状态拆开，允许表达“已连接但忙碌”等组合状态，而不是使用单一布尔值。
+- `DeviceAdapter` 保持纯异步接口，以兼容后续 Mock 延迟、本地桥接或正式厂家接口。
+- 厂家、型号、序列号和固件版本作为 `DeviceInfo` 可选字段；没有正式资料时不填值。
+- `examId` 使用不透明字符串，上层不解析其生成规则。
+- 未知 17 项仍只允许使用 `metric_01`～`metric_17` 及中性显示名；当前没有生成任何指标值、医学名称或单位。
+- 本阶段不定义厂家错误码或真实通信行为，操作失败由 Promise 显式拒绝，统一应用错误类型留待 Exam Service 与 Mock 阶段结合实际场景补充。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划、代理约束、产品范围和原架构文档。
+- 盘点现有源码，确认此前没有可复用的设备领域类型。
+- 实现设备抽象契约、领域类型和配套文档，并执行项目验证命令。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run typecheck`：通过。
+- `npm run lint`：通过。
+- `npm test`：通过；1 个测试文件、2 个测试全部通过。首次在沙箱内运行因 Vite 子进程 `spawn EPERM` 启动失败，在获准的沙箱外环境重跑后通过。
+- `npm run build`：通过；Vite 完成 76 个模块转换。首次在沙箱内运行同样因 `spawn EPERM` 失败，在获准的沙箱外环境重跑后通过。
+- 本阶段只新增类型与接口，没有具体 Adapter 行为，因此未伪造连接、取消或结果单元测试；现有首页回归测试保持通过。
+
+### 未解决问题
+
+- `MockDeviceAdapter` 尚未实现。
+- Exam Service、完整状态机和设备错误模型尚未实现。
+- UI 尚未接入 DeviceAdapter，检测页、结果页和报告页尚未实现。
+- 厂家接口、接入方式、错误码及 17 项正式字段定义仍为 `TBD`。
+
+### 下一步
+
+等待用户明确授权后，再基于当前契约实现 `MockDeviceAdapter` 及其契约测试，不提前接入 UI 或真实设备。
+
 ## 2026-08-28 — Phase 1 智能验光 Demo 首页
 
 ### 本次目标

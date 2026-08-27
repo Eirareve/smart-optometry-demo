@@ -3,31 +3,88 @@
 ## 当前状态
 
 - 当前产品阶段：网页 Demo。
-- 当前代码状态：尚未实现设备适配层。
+- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter`；UI 和未来 Exam Service 尚未接入该实现。
 - 真实设备：未接入。
 - 厂家接口资料：尚未取得。
 - 17 项正式字段定义：尚未取得。
 
 在正式资料到位前，不得编写或声称存在厂家 API、SDK、DLL、协议、错误码或医学字段映射。
 
-## V0.1 Mock 接入计划
+## 当前 DeviceAdapter 契约
+
+我方内部统一接口位于 `src/services/device/DeviceAdapter.ts`，业务错误位于 `src/services/device/DeviceAdapterError.ts`，领域类型位于 `src/domain/`。当前契约覆盖连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取。详细方法、单检测并发规则、轮询责任与错误码见 `docs/04-api-contract.md`。
+
+该契约是当前 Mock 与未来 Real Adapter 共同遵循的我方标准，不是厂家 API。`MockDeviceAdapter` 已实现该契约；首页仍未调用此接口，本阶段没有新增 Exam Service 或页面交互。
+
+## V0.1 Mock Device 实现
 
 ```text
-UI → Exam Service → DeviceAdapter → MockDeviceAdapter
+当前：DeviceAdapter → MockDeviceAdapter
+
+后续页面接入：UI → Exam Service → DeviceAdapter → MockDeviceAdapter
 ```
 
-Mock 的目标是支持网页 Demo 的连接状态、检测阶段、取消、完成结果和可控异常。它不是厂家设备的仿真规范，也不代表真实设备能力。
+实现位于 `src/services/device/MockDeviceAdapter.ts`，测试位于 `src/services/device/MockDeviceAdapter.test.ts`。该类是纯内存 Demo 实现，不调用厂家 SDK、API、DLL、通信协议或真实硬件，也不代表真实设备能力。
 
-具体代码位置、启动方式、延迟配置、数据文件位置和异常开关将在 Mock 实现完成后补充。目前统一为 `TBD`。
+连接成功返回：
+
+```text
+设备名称：Smart Optometry Mock Device
+设备 ID：MOCK-OPT-001
+```
+
+名称、编号和状态消息均明确包含 Mock/Demo 含义，不填写未经确认的厂家、真实型号、序列号或固件版本。当前 `DeviceStatus` 没有 `ready` 枚举；Mock 就绪按既有契约表达为 `connectionState: connected`、`operatingState: idle`，同时由 `message` 明确说明“Mock/Demo 设备已连接并就绪”。断开后为 `disconnected` 和 `unknown`。
+
+### 使用与时间配置
+
+Mock 可通过设备服务统一导出入口创建：
+
+```ts
+import {
+  FAST_MOCK_DEVICE_TIMING,
+  MockDeviceAdapter,
+} from '../src/services/device'
+
+const demoAdapter = new MockDeviceAdapter()
+const fastAdapter = new MockDeviceAdapter({
+  timing: FAST_MOCK_DEVICE_TIMING,
+})
+```
+
+`DEFAULT_MOCK_DEVICE_TIMING` 集中保存普通 Demo 时间：连接延迟 350ms，随后依次为 1 秒准备、2 秒左眼模拟采集、2 秒右眼模拟采集、1 秒模拟分析，总检测时长 6 秒。`FAST_MOCK_DEVICE_TIMING` 为测试或快速演示提供每阶段 10ms、连接 0ms 的配置，也可通过构造参数覆盖单项时间。
+
+连接只使用一个延迟辅助函数。检测阶段不创建多个 `setTimeout`，也不在 Adapter 内轮询；每次 `getExamStatus(examId)` 都根据 `Date.now() - startedAtMs` 和集中阈值计算当前快照：
+
+```text
+preparing (10%)
+  → left_eye (35%)
+  → right_eye (65%)
+  → analyzing (90%)
+  → completed (100%)
+```
+
+### 内存状态与并发
+
+- `Map<examId, MockExamRecord>` 保存检测会话、毫秒时间戳及可选终止状态。
+- `activeExamId` 只指向当前进行中的检测；开始时先同步占用，再返回 `ExamSession`，避免重复 `startExam()` 创建第二个会话。
+- 到达 `completed`、成功取消或进入 `error` 后释放活动检测名额。
+- 检测过程中断开 Mock 连接时，该会话结束为 `error`；这只是当前 Mock 的安全终止行为，不代表厂家设备规范。
+- 所有标准时间字段对外转换为 ISO 8601 字符串。
+
+Mock 遵守“一台设备只有一个活动检测”的契约，并覆盖 `DEVICE_NOT_CONNECTED`、`DEVICE_BUSY`、`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和 `EXAM_ALREADY_FINISHED`。这些是我方业务错误码，不是厂家错误码。
+
+### 模拟结果
 
 Mock 数据规则：
 
 - 必须标记来源为 `mock` 或“模拟数据”。
-- 可展示 Demo 用 SPH、CYL、AXIS。
+- 右眼固定 Demo 值为 SPH -2.50、CYL -0.75、AXIS 175；左眼为 SPH -2.75、CYL -0.50、AXIS 10。
 - 未知 17 项的 code 仅使用 `metric_01`～`metric_17`。
 - 未知 17 项的显示名仅使用“扩展检测指标 01”～“扩展检测指标 17”。
+- 占位值仅使用 `DEMO-01`～`DEMO-17`，状态为 `unknown`。
 - 不赋予未知项医学名称、医学单位、合法范围或诊断状态。
-- 原始模拟返回保留在 `rawData`，便于调试数据映射。
+- `ExamResult.source` 固定为 `mock`。
+- 原始模拟返回保留在 `rawData`，其内部同样包含 `source: mock` 和 `demo: true`，只用于调试与未来映射验证；普通 UI 不得依赖其内部结构。
 
 ## 获取厂家资料后的接入步骤
 

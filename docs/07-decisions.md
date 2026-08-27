@@ -38,9 +38,9 @@
 
 - **状态**：已接受
 - **Context**：厂家最终可能提供 DLL、SDK、串口、USB、TCP 或标准 Web API，目前接入形式未知。
-- **Decision**：UI 只通过 Exam Service 和 `DeviceAdapter` 使用设备能力，不直接依赖 Mock 或任何厂家实现。
+- **Decision**：UI 只通过 Exam Service 和 `DeviceAdapter` 使用设备能力，不直接依赖 Mock 或任何厂家实现。设备、检测与结果类型集中在 `src/domain/`，接口集中在 `src/services/device/`。
 - **Reason**：稳定边界允许未来替换底层数据源，同时减少对页面和交互流程的改动。
-- **Consequence**：需要维护统一契约、清晰错误状态和原始数据；真实接入路径在取得正式资料后决定。
+- **Consequence**：已建立连接、断开、状态、启动、取消和结果读取的统一异步契约；具体 Adapter 必须映射为标准领域模型并保留 `rawData`，真实接入路径仍在取得正式资料后决定。
 
 ## DEC-005：本地设备桥接服务是条件性方案
 
@@ -49,3 +49,11 @@
 - **Decision**：只有在正式资料确认需要 DLL、串口、USB 或 TCP 私有协议时，才采用 Local Device Bridge；若厂家提供标准 Web API，则重新评估。
 - **Reason**：避免在接入方式未知时过早锁定技术实现。
 - **Consequence**：桥接技术、接口和部署方式当前均为 `TBD`，不得按厂家既有能力对外描述。
+
+## DEC-007：单设备单检测与快照查询
+
+- **状态**：已接受
+- **Context**：当前 Demo 只建模一台设备，且检测需要经历多个阶段；如果允许重复启动或把轮询隐藏在 Adapter/UI 中，会造成状态冲突、无法停止的定时器和伪结果风险。
+- **Decision**：一台设备同时只允许一个活动检测；重复启动返回 `DEVICE_BUSY`。`getExamStatus()` 只返回一次快照，持续轮询由 Exam Service 负责。只有 `completed` 检测可读取结果，取消只作用于进行中检测。
+- **Reason**：让设备状态、单次检测状态和流程编排各自保持单一职责，并让 Mock 与未来 Real Adapter 遵守同一套可测试规则。
+- **Consequence**：具体 Adapter 需要跟踪唯一活动检测并抛出统一业务错误；React 页面不直接轮询，Exam Service 实现前这些规则只存在于 contract 和文档中。
