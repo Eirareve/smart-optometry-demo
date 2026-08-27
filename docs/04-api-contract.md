@@ -2,9 +2,9 @@
 
 ## 范围与状态
 
-本文记录网页 Demo 内部的 TypeScript 设备契约。它用于统一未来 `MockDeviceAdapter` 和 `RealDeviceAdapter` 对 Exam Service 提供的能力，**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
+本文记录网页 Demo 内部的 TypeScript 设备契约。它用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对 Exam Service 提供的能力，**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
 
-当前仅完成类型与接口定义，尚未实现 Mock、真实设备通讯、HTTP API 或本地设备桥接服务。
+当前已完成类型、接口定义和 `MockDeviceAdapter` 内存实现；尚未实现真实设备通讯、HTTP API、本地设备桥接服务、Exam Service 或 UI 接入。
 
 ## 代码位置
 
@@ -15,6 +15,8 @@ src/domain/result.ts
 src/domain/index.ts
 src/services/device/DeviceAdapter.ts
 src/services/device/DeviceAdapterError.ts
+src/services/device/MockDeviceAdapter.ts
+src/services/device/MockDeviceAdapter.test.ts
 src/services/device/index.ts
 ```
 
@@ -33,6 +35,47 @@ export interface DeviceAdapter {
 ```
 
 所有方法均为异步接口，以兼容 Mock 延迟、未来本地桥接服务或厂家正式接口。`examId` 是 Adapter 返回的不透明标识；调用方只负责原样传递，不依赖其格式。
+
+## 当前 Mock 实现
+
+`MockDeviceAdapter implements DeviceAdapter`，没有修改上述 7 个方法或领域类型。它是明确标记的纯内存 Demo 数据源，不包含真实厂家名称、型号、接口、协议或硬件能力声明。
+
+### 连接与设备状态
+
+- 初始状态为 `connectionState: disconnected`、`operatingState: unknown`。
+- `connect()` 使用集中配置的短暂延迟，返回 `MOCK-OPT-001` / `Smart Optometry Mock Device`。
+- 连接成功后按当前契约返回 `connectionState: connected`、`operatingState: idle`，并在 `message` 中明确设备为 Mock/Demo 且已就绪。
+- `ready` 不是 `DeviceStatus` 的枚举值；它仍属于未来 Exam Service 组织的 UI 流程状态，因此本次没有扩展或修改 contract。
+- 活动检测期间 `operatingState` 为 `busy` 并携带 `activeExamId`；终止后恢复 `idle`。
+- `disconnect()` 后为 `disconnected`；若断开时存在活动检测，Mock 将该检测安全终止为 `error`。该行为只属于 Demo，不表示真实设备规范。
+
+### 时间与会话保存
+
+普通 Demo 的集中配置为：
+
+```ts
+const DEFAULT_MOCK_DEVICE_TIMING = {
+  connectDelayMs: 350,
+  preparingMs: 1000,
+  leftEyeMs: 2000,
+  rightEyeMs: 2000,
+  analyzingMs: 1000,
+}
+```
+
+测试可注入 `FAST_MOCK_DEVICE_TIMING` 或覆盖任一时间项。Mock 用内存 `Map` 按 `examId` 保存 `ExamSession`、内部毫秒时间戳和可选终止状态，并单独保存 `activeExamId`。阶段由查询时的已耗时间与累计阈值推导，不使用后台阶段定时器，也不承担轮询。
+
+`startExam()` 在返回 Promise 前完成连接检查、活动检测检查、会话保存和设备占用。因此同一实例的并发或连续重复调用不能越过 `DEVICE_BUSY` 检查。到达总时长后，即使此前没有查询状态，下一次状态、设备或启动请求也会先识别旧检测已经完成并释放名额。
+
+### Mock 结果
+
+只有推导状态为 `completed` 时才构造标准 `ExamResult`：
+
+- `source` 固定为 `mock`。
+- OD：SPH -2.50、CYL -0.75、AXIS 175。
+- OS：SPH -2.75、CYL -0.50、AXIS 10。
+- `metrics` 恰好包含 `metric_01`～`metric_17` 和“扩展检测指标 01”～“扩展检测指标 17”，占位值为 `DEMO-01`～`DEMO-17`，不包含医学单位或未经确认的医学含义。
+- `rawData` 必填，包含明确的 `source: mock`、`demo: true` 以及 Mock 内部原始结构。它不属于 UI 数据契约，页面不得依赖其结构。
 
 ## 方法语义
 

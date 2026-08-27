@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI 和 `DeviceAdapter` 抽象契约；Mock Device、Exam Service、检测流程、结果页和报告页尚未实现，真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约和 `MockDeviceAdapter`；Exam Service、检测流程、结果页和报告页尚未实现，真实设备未接入。
 
 ## V0.1 分层
 
@@ -16,7 +16,7 @@ Exam Service（后续阶段）
 DeviceAdapter
   │  我方内部统一设备契约
   ▼
-MockDeviceAdapter（后续阶段）
+MockDeviceAdapter（当前已实现）
      仅提供明确标记的模拟状态与模拟数据
 ```
 
@@ -61,7 +61,9 @@ src/domain/index.ts   → 领域类型统一导出
 
 ### MockDeviceAdapter
 
-Mock 实现尚未开始。后续实现必须遵循同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、检测阶段、结果和可控异常；其行为不代表真实厂家设备规范。
+`src/services/device/MockDeviceAdapter.ts` 已实现同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、按时间推导的检测阶段、取消和完成结果；其行为不代表真实厂家设备规范。实现用内存 Map 保存检测记录，并用单一 `activeExamId` 保证一台 Mock Device 同时只有一个活动检测。普通 Demo 和测试时间均由同一文件中的配置集中管理。
+
+Mock 尚未接入 UI；后续 Exam Service 应通过 `DeviceAdapter` 类型接收该实例，页面不能直接导入具体实现。未来 Real Adapter 也将在同一装配边界替换 Mock，而不是改写页面。
 
 ## 状态边界
 
