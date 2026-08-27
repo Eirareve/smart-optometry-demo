@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Smart Optometry Demo
 
 Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的软件原型项目。
@@ -43,4 +42,4 @@ Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的�
 =======
 # smart-optometry-demo
 一个基于网页的智能验光原型，集成了模拟设备、检查状态管理、屈光数据可视化和报告功能。
->>>>>>> 32cee1c8574c7d5f313a17fa33a72c10bbe6a5d3
+
