@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Smart Optometry Demo
 
 Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的软件原型项目。
@@ -6,6 +5,26 @@ Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的�
 当前产品阶段为**网页 Demo**。项目目标是验证设备型应用的交互闭环、验光流程状态、数据抽象与报告呈现方式，并为后续通过统一设备适配层接入厂家正式接口预留架构。
 
 当前尚未取得厂家接口资料，也未接入真实设备。未来 Demo 中出现的设备状态和验光数据都必须明确标记为模拟数据，不构成医疗诊断或处方依据。除 SPH、CYL、AXIS 外，尚未定义的 17 项数据统一使用 `metric_01`～`metric_17` 作为扩展指标占位，不赋予医学名称。
+
+## 当前状态
+
+Phase 1 首页已完成，包含 DEMO MODE、设备状态、设备编号、连接状态、最后通信时间和“开始智能验光”入口。当前未实现 Mock Device 或检测流程，因此页面不会显示设备已连接，开始按钮也不会启动检测。
+
+## 本地运行
+
+```bash
+npm install
+npm run dev
+```
+
+验证命令：
+
+```bash
+npm run typecheck
+npm run build
+npm run lint
+npm test
+```
 
 ## Roadmap
 
@@ -40,7 +59,3 @@ Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的�
 - 建立稳定的真实设备接入能力
 - 完成端到端数据闭环
 - 完善部署、监控、安全与隐私保护
-=======
-# smart-optometry-demo
-一个基于网页的智能验光原型，集成了模拟设备、检查状态管理、屈光数据可视化和报告功能。
->>>>>>> 32cee1c8574c7d5f313a17fa33a72c10bbe6a5d3
