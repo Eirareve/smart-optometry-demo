@@ -1,0 +1,318 @@
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/01-product-scope.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/02-architecture.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/03-device-integration.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/06-development-log.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/07-decisions.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/08-test-plan.md', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 3041f72..9281481 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -8,7 +8,7 @@[m [mSmart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的[m
+ [m
+ ## 当前状态[m
+ [m
+[31m-Phase 1 首页已完成，包含 DEMO MODE、设备状态、设备编号、连接状态、最后通信时间和“开始智能验光”入口。当前未实现 Mock Device 或检测流程，因此页面不会显示设备已连接，开始按钮也不会启动检测。[m
+[32m+[m[32mPhase 1 首页和统一 `DeviceAdapter` 抽象契约已完成。首页包含 DEMO MODE、设备状态、设备编号、连接状态、最后通信时间和“开始智能验光”入口；设备领域类型与连接、状态、检测、取消、结果读取接口已建立。当前未实现 Mock Device、真实设备通讯或检测流程，因此页面不会显示设备已连接，开始按钮也不会启动检测。[m
+ [m
+ ## 本地运行[m
+ [m
+[1mdiff --git a/docs/01-product-scope.md b/docs/01-product-scope.md[m
+[1mindex c371a9c..ac582ca 100644[m
+[1m--- a/docs/01-product-scope.md[m
+[1m+++ b/docs/01-product-scope.md[m
+[36m@@ -6,7 +6,7 @@[m
+ [m
+ ## 当前阶段[m
+ [m
+[31m-当前阶段为 **V0.1 网页 Demo 的 Phase 1 首页**。React 基础工程和首页已经实现；Mock Device、检测流程、结果页和报告页尚未实现，也没有接入真实设备。[m
+[32m+[m[32m当前阶段为 **V0.1 网页 Demo**。React 基础工程、首页和 `DeviceAdapter` 抽象契约已经实现；Mock Device、检测流程、结果页和报告页尚未实现，也没有接入真实设备。[m
+ [m
+ V0.1 的目标闭环为：[m
+ [m
+[1mdiff --git a/docs/02-architecture.md b/docs/02-architecture.md[m
+[1mindex dfc3bf6..1edffce 100644[m
+[1m--- a/docs/02-architecture.md[m
+[1m+++ b/docs/02-architecture.md[m
+[36m@@ -2,57 +2,86 @@[m
+ [m
+ ## 文档状态[m
+ [m
+[31m-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程和首页 UI；Exam Service、DeviceAdapter、Mock Device、检测流程、结果页和报告页尚未实现。[m
+[32m+[m[32m本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI 和 `DeviceAdapter` 抽象契约；Mock Device、Exam Service、检测流程、结果页和报告页尚未实现，真实设备未接入。[m
+ [m
+ ## V0.1 分层[m
+ [m
+ ```text[m
+ 浏览器中的网页 UI[m
+[31m-  │[m
+[32m+[m[32m  │  只表达用户意图和渲染状态[m
+   ▼[m
+[31m-Exam Service[m
+[31m-  │  负责流程、状态机与结果组织[m
+[32m+[m[32mExam Service（后续阶段）[m
+[32m+[m[32m  │  负责流程、状态机、取消、异常与结果组织[m
+   ▼[m
+ DeviceAdapter[m
+[31m-  │  隔离 UI 与具体设备实现[m
+[32m+[m[32m  │  我方内部统一设备契约[m
+   ▼[m
+[31m-MockDeviceAdapter[m
+[32m+[m[32mMockDeviceAdapter（后续阶段）[m
+      仅提供明确标记的模拟状态与模拟数据[m
+ ```[m
+ [m
+[32m+[m[32m依赖方向始终由上层指向抽象。页面不能导入 `MockDeviceAdapter` 或未来的 `RealDeviceAdapter`，也不能直接承担设备连接、轮询、取消和原始数据转换逻辑。[m
+[32m+[m
+ ### UI[m
+ [m
+[31m-当前已实现首页，包含 Demo 标识、设备状态卡和操作入口。首页只呈现明确的“设备未接入”静态状态，不调用或模拟设备能力。检测页、结果页、报告页和可选开发调试页仍为计划内容。[m
+[32m+[m[32m当前已实现首页，包含 Demo 标识、设备状态卡和操作入口。首页仍只呈现明确的“设备未接入”静态状态，尚未连接 `DeviceAdapter`。检测页、结果页、报告页和可选开发调试页不在本阶段实现范围。[m
+ [m
+ ### Exam Service[m
+ [m
+[31m-负责组织检测生命周期、状态转换、取消、异常和结果读取。页面组件不直接承载完整业务流程。[m
+[32m+[m[32mExam Service 将在后续阶段负责完整检测生命周期、状态转换、轮询或事件协调、取消、异常和结果读取。它依赖 `DeviceAdapter` 接口，而不是某个具体适配器。页面只向 Exam Service 发出意图并消费标准化状态。[m
+ [m
+ ### DeviceAdapter[m
+ [m
+[31m-作为我方内部设备能力抽象，隔离上层流程与底层数据来源。其最终方法、参数和错误模型需在实现阶段验证；该抽象不是厂家 API 的描述。[m
+[32m+[m[32m`src/services/device/DeviceAdapter.ts` 已定义我方内部的统一设备边界：[m
+[32m+[m
+[32m+[m[32m- `connect()`[m
+[32m+[m[32m- `disconnect()`[m
+[32m+[m[32m- `getStatus()`[m
+[32m+[m[32m- `startExam()`[m
+[32m+[m[32m- `cancelExam(examId)`[m
+[32m+[m[32m- `getExamStatus(examId)`[m
+[32m+[m[32m- `getExamResult(examId)`[m
+[32m+[m
+[32m+[m[32m接口只描述上层需要的能力，不描述或暗示任何厂家 API、SDK、DLL、协议和错误码。具体方法语义与数据结构见 `docs/04-api-contract.md`。[m
+[32m+[m
+[32m+[m[32m### Domain 类型[m
+[32m+[m
+[32m+[m[32m标准类型按职责放置，避免页面和设备实现各自重复定义：[m
+[32m+[m
+[32m+[m[32m```text[m
+[32m+[m[32msrc/domain/device.ts  → DeviceInfo、DeviceStatus、设备状态枚举[m
+[32m+[m[32msrc/domain/exam.ts    → ExamSession、ExamStatus、ExamStage[m
+[32m+[m[32msrc/domain/result.ts  → ExamResult、EyeRefraction、ExtendedMetric[m
+[32m+[m[32msrc/domain/index.ts   → 领域类型统一导出[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m这些类型只表达我方稳定的数据模型。厂家私有字段未来由独立映射层转换，未经转换的返回保存在 `ExamResult.rawData`。[m
+ [m
+ ### MockDeviceAdapter[m
+ [m
+[31m-V0.1 计划中的模拟实现，用于演示连接状态、检测阶段、结果和异常场景。所有输出必须标为模拟数据。[m
+[32m+[m[32mMock 实现尚未开始。后续实现必须遵循同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、检测阶段、结果和可控异常；其行为不代表真实厂家设备规范。[m
+ [m
+[31m-## 状态机[m
+[32m+[m[32m## 状态边界[m
+ [m
+[31m-计划使用以下状态表达验光流程：[m
+[32m+[m[32m`DeviceAdapter` 当前定义两类状态快照：[m
+[32m+[m
+[32m+[m[32m- `DeviceStatus`：连接状态与设备运行状态。[m
+[32m+[m[32m- `ExamStatus`：某个 `examId` 对应的检测阶段与可选进度。[m
+[32m+[m
+[32m+[m[32m设备侧检测阶段为：[m
+ [m
+ ```text[m
+[31m-idle → connecting → ready → preparing[m
+[31m-     → left_eye → right_eye → analyzing → completed[m
+[32m+[m[32mpreparing → left_eye → right_eye → analyzing → completed[m
+ ```[m
+ [m
+[31m-执行中的状态可以进入：[m
+[32m+[m[32m执行中的检测也可以进入：[m
+ [m
+ ```text[m
+ cancelled[m
+ error[m
+ ```[m
+ [m
+[31m-每个状态都应有明确 UI，不使用单一 `loading` 值替代状态机。[m
+[32m+[m[32m`idle`、`connecting` 和 `ready` 属于未来 Exam Service 组织的完整 UI 流程状态，不与单次检测会话的 `ExamStatus` 混为一谈。页面不得用单一 `loading` 值替代这些状态。[m
+ [m
+ ## 数据流[m
+ [m
+[36m@@ -60,22 +89,25 @@[m [merror[m
+ 用户操作[m
+   → UI 发起意图[m
+   → Exam Service 推进流程[m
+[31m-  → DeviceAdapter 获取状态或结果[m
+[31m-  → Exam Service 组织标准化数据[m
+[32m+[m[32m  → DeviceAdapter 获取设备状态、检测状态或结果[m
+[32m+[m[32m  → 具体 Adapter 转换为标准领域模型[m
+[32m+[m[32m  → Exam Service 组织可呈现状态[m
+   → UI 呈现模拟数据声明、结果或错误[m
+ ```[m
+ [m
+[31m-结果模型计划保留：[m
+[32m+[m[32m标准结果保留：[m
+ [m
+[31m-- 左右眼 SPH、CYL、AXIS。[m
+[31m-- 可扩展的 `metrics` 集合。[m
+[31m-- `metric_01`～`metric_17` 中性占位。[m
+[32m+[m[32m- 左右眼 SPH、CYL、AXIS 对应的 `sphere`、`cylinder`、`axis`。[m
+[32m+[m[32m- 可扩展的 `metrics` 集合，不建立 17 个固定业务字段。[m
+[32m+[m[32m- V0.1 中性占位 `metric_01`～`metric_17`。[m
+ - 未经转换的 `rawData`。[m
+[31m-- 数据来源标识，用于区分 `mock` 与未来真实设备。[m
+[32m+[m[32m- `source` 数据来源标识，用于区分 `mock` 与未来真实设备数据。[m
+ [m
+ ## 未来真实设备接入[m
+ [m
+[31m-真实设备接入必须以厂家正式资料为依据。如果厂家提供 Windows DLL、SDK、串口、USB 或 TCP 私有协议，计划在浏览器与设备之间增加本地设备桥接服务，并在其后实现 `RealDeviceAdapter`：[m
+[32m+[m[32m真实设备接入必须以厂家正式资料为依据。未来的 `RealDeviceAdapter` 将实现当前统一契约，并负责把桥接层或厂家正式接口的状态与结果转换为领域模型；UI 和 Exam Service 不因底层来源变化而改写。[m
+[32m+[m
+[32m+[m[32m如果厂家提供 Windows DLL、SDK、串口、USB 或 TCP 私有协议，候选结构为：[m
+ [m
+ ```text[m
+ 网页 UI → Exam Service → DeviceAdapter → RealDeviceAdapter[m
+[36m@@ -83,11 +115,13 @@[m [merror[m
+                                       → 厂家正式 SDK/API/协议[m
+ ```[m
+ [m
+[31m-具体桥接技术、通信方法和字段映射目前均为 `TBD`。如果厂家提供标准 Web API，应依据正式文档重新评估，而不是预先假定实现方式。[m
+[32m+[m[32m具体桥接技术、通信方法、错误映射和字段映射目前均为 `TBD`。如果厂家提供标准 Web API，应依据正式文档重新评估，而不是预先假定实现方式。[m
+ [m
+ ## 核心约束[m
+ [m
+ - UI 不感知底层使用 Mock 还是真实设备。[m
+ - 厂家字段映射独立于页面和标准结果模型。[m
+ - 原始数据必须保留，映射失败不得静默忽略。[m
+[32m+[m[32m- 设备与检测标识作为不透明字符串传递，页面不解析其格式。[m
+[32m+[m[32m- 时间字段由 Adapter 输出 ISO 8601 字符串。[m
+ - 断线、超时、设备忙、取消、异常数据和空结果需要成为可观察状态。[m
+[1mdiff --git a/docs/03-device-integration.md b/docs/03-device-integration.md[m
+[1mindex f07a563..d9dea2c 100644[m
+[1m--- a/docs/03-device-integration.md[m
+[1m+++ b/docs/03-device-integration.md[m
+[36m@@ -3,13 +3,19 @@[m
+ ## 当前状态[m
+ [m
+ - 当前产品阶段：网页 Demo。[m
+[31m-- 当前代码状态：尚未实现设备适配层。[m
+[32m+[m[32m- 当前代码状态：已定义 `DeviceAdapter` 及标准领域类型，尚未实现 Mock 或真实设备适配器。[m
+ - 真实设备：未接入。[m
+ - 厂家接口资料：尚未取得。[m
+ - 17 项正式字段定义：尚未取得。[m
+ [m
+ 在正式资料到位前，不得编写或声称存在厂家 API、SDK、DLL、协议、错误码或医学字段映射。[m
+ [m
+[32m+[m[32m## 当前 DeviceAdapter 契约[m
+[32m+[m
+[32m+[m[32m我方内部统一接口位于 `src/services/device/DeviceAdapter.ts`，领域类型位于 `src/domain/`。当前契约覆盖连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取。详细方法与字段见 `docs/04-api-contract.md`。[m
+[32m+[m
+[32m+[m[32m该契约是未来 Mock 与 Real Adapter 共同遵循的我方标准，不是厂家 API。当前没有任何设备通讯实现，首页也尚未调用此接口。[m
+[32m+[m
+ ## V0.1 Mock 接入计划[m
+ [m
+ ```text[m
+[36m@@ -18,7 +24,7 @@[m [mUI → Exam Service → DeviceAdapter → MockDeviceAdapter[m
+ [m
+ Mock 的目标是支持网页 Demo 的连接状态、检测阶段、取消、完成结果和可控异常。它不是厂家设备的仿真规范，也不代表真实设备能力。[m
+ [m
+[31m-具体代码位置、启动方式、延迟配置、数据文件位置和异常开关将在 Mock 实现完成后补充。目前统一为 `TBD`。[m
+[32m+[m[32mMock 实现计划放在 `src/services/device/`，但具体文件、启动方式、延迟配置、数据文件位置和异常开关将在 Mock 实现完成后确认。目前统一为 `TBD`。[m
+ [m
+ Mock 数据规则：[m
+ [m
+[1mdiff --git a/docs/06-development-log.md b/docs/06-development-log.md[m
+[1mindex 6b89850..89ff869 100644[m
+[1m--- a/docs/06-development-log.md[m
+[1m+++ b/docs/06-development-log.md[m
+[36m@@ -1,5 +1,59 @@[m
+ # 开发日志[m
+ [m
+[32m+[m[32m## 2026-08-28 — DeviceAdapter 设备抽象契约[m
+[32m+[m
+[32m+[m[32m### 本次目标[m
+[32m+[m
+[32m+[m[32m只建立与厂家设备解耦的 `DeviceAdapter` 接口和标准 TypeScript 类型，不实现 Mock、真实设备通讯、检测页或结果页。[m
+[32m+[m
+[32m+[m[32m### 完成内容[m
+[32m+[m
+[32m+[m[32m- 新增 `DeviceAdapter` 的连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取接口。[m
+[32m+[m[32m- 新增 `DeviceInfo`、`DeviceStatus`、`ExamSession`、`ExamStatus`、`ExamResult`、`EyeRefraction`、`ExtendedMetric` 等领域类型。[m
+[32m+[m[32m- 将设备、检测和结果类型分别放入 `src/domain/`，由统一入口导出，避免未来页面与 Adapter 重复定义。[m
+[32m+[m[32m- 扩展指标使用 `metrics` 集合，不创建 17 个固定业务字段。[m
+[32m+[m[32m- 将 `ExamResult.rawData` 设为必填 `unknown`，要求调用方缩窄类型后才能访问。[m
+[32m+[m[32m- 明确单次检测的 `ExamStatus` 与未来 Exam Service 完整 UI 状态机的边界。[m
+[32m+[m[32m- 新建内部 API Contract，并同步架构、设备接入、产品范围、技术决策、测试计划和 README 状态。[m
+[32m+[m
+[32m+[m[32m### 我做出的决策[m
+[32m+[m
+[32m+[m[32m- 把设备连接状态与运行状态拆开，允许表达“已连接但忙碌”等组合状态，而不是使用单一布尔值。[m
+[32m+[m[32m- `DeviceAdapter` 保持纯异步接口，以兼容后续 Mock 延迟、本地桥接或正式厂家接口。[m
+[32m+[m[32m- 厂家、型号、序列号和固件版本作为 `DeviceInfo` 可选字段；没有正式资料时不填值。[m
+[32m+[m[32m- `examId` 使用不透明字符串，上层不解析其生成规则。[m
+[32m+[m[32m- 未知 17 项仍只允许使用 `metric_01`～`metric_17` 及中性显示名；当前没有生成任何指标值、医学名称或单位。[m
+[32m+[m[32m- 本阶段不定义厂家错误码或真实通信行为，操作失败由 Promise 显式拒绝，统一应用错误类型留待 Exam Service 与 Mock 阶段结合实际场景补充。[m
+[32m+[m
+[32m+[m[32m### Codex 辅助内容[m
+[32m+[m
+[32m+[m[32m- 完整阅读项目规划、代理约束、产品范围和原架构文档。[m
+[32m+[m[32m- 盘点现有源码，确认此前没有可复用的设备领域类型。[m
+[32m+[m[32m- 实现设备抽象契约、领域类型和配套文档，并执行项目验证命令。[m
+[32m+[m
+[32m+[m[32m### 我人工检查/修改的内容[m
+[32m+[m
+[32m+[m[32m尚未记录，等待项目负责人检查。[m
+[32m+[m
+[32m+[m[32m### 测试结果[m
+[32m+[m
+[32m+[m[32m- `npm run typecheck`：通过。[m
+[32m+[m[32m- `npm run lint`：通过。[m
+[32m+[m[32m- `npm test`：通过；1 个测试文件、2 个测试全部通过。首次在沙箱内运行因 Vite 子进程 `spawn EPERM` 启动失败，在获准的沙箱外环境重跑后通过。[m
+[32m+[m[32m- `npm run build`：通过；Vite 完成 76 个模块转换。首次在沙箱内运行同样因 `spawn EPERM` 失败，在获准的沙箱外环境重跑后通过。[m
+[32m+[m[32m- 本阶段只新增类型与接口，没有具体 Adapter 行为，因此未伪造连接、取消或结果单元测试；现有首页回归测试保持通过。[m
+[32m+[m
+[32m+[m[32m### 未解决问题[m
+[32m+[m
+[32m+[m[32m- `MockDeviceAdapter` 尚未实现。[m
+[32m+[m[32m- Exam Service、完整状态机和设备错误模型尚未实现。[m
+[32m+[m[32m- UI 尚未接入 DeviceAdapter，检测页、结果页和报告页尚未实现。[m
+[32m+[m[32m- 厂家接口、接入方式、错误码及 17 项正式字段定义仍为 `TBD`。[m
+[32m+[m
+[32m+[m[32m### 下一步[m
+[32m+[m
+[32m+[m[32m等待用户明确授权后，再基于当前契约实现 `MockDeviceAdapter` 及其契约测试，不提前接入 UI 或真实设备。[m
+[32m+[m
+ ## 2026-08-28 — Phase 1 智能验光 Demo 首页[m
+ [m
+ ### 本次目标[m
+[1mdiff --git a/docs/07-decisions.md b/docs/07-decisions.md[m
+[1mindex 5129966..4bd1924 100644[m
+[1m--- a/docs/07-decisions.md[m
+[1m+++ b/docs/07-decisions.md[m
+[36m@@ -38,9 +38,9 @@[m
+ [m
+ - **状态**：已接受[m
+ - **Context**：厂家最终可能提供 DLL、SDK、串口、USB、TCP 或标准 Web API，目前接入形式未知。[m
+[31m-- **Decision**：UI 只通过 Exam Service 和 `DeviceAdapter` 使用设备能力，不直接依赖 Mock 或任何厂家实现。[m
+[32m+[m[32m- **Decision**：UI 只通过 Exam Service 和 `DeviceAdapter` 使用设备能力，不直接依赖 Mock 或任何厂家实现。设备、检测与结果类型集中在 `src/domain/`，接口集中在 `src/services/device/`。[m
+ - **Reason**：稳定边界允许未来替换底层数据源，同时减少对页面和交互流程的改动。[m
+[31m-- **Consequence**：需要维护统一契约、清晰错误状态和原始数据；真实接入路径在取得正式资料后决定。[m
+[32m+[m[32m- **Consequence**：已建立连接、断开、状态、启动、取消和结果读取的统一异步契约；具体 Adapter 必须映射为标准领域模型并保留 `rawData`，真实接入路径仍在取得正式资料后决定。[m
+ [m
+ ## DEC-005：本地设备桥接服务是条件性方案[m
+ [m
+[1mdiff --git a/docs/08-test-plan.md b/docs/08-test-plan.md[m
+[1mindex 1bc776f..b148b41 100644[m
+[1m--- a/docs/08-test-plan.md[m
+[1m+++ b/docs/08-test-plan.md[m
+[36m@@ -12,3 +12,10 @@[m
+ ## 后续阶段[m
+ [m
+ 检测、取消、断线、超时、异常数据、重复检测、页面刷新和结果为空等场景，在对应功能实现后补充。[m
+[32m+[m
+[32m+[m[32m## DeviceAdapter 抽象层[m
+[32m+[m
+[32m+[m[32m- TypeScript 类型检查覆盖统一接口与领域类型的语法、导入和导出。[m
+[32m+[m[32m- lint 覆盖新增 TypeScript 文件的静态规则。[m
+[32m+[m[32m- 本阶段没有具体 Adapter 行为，因此不伪造连接、取消或结果测试。[m
+[32m+[m[32m- Mock 与 Real Adapter 实现后应共享契约测试，并分别覆盖连接、状态、取消、结果、错误和 `rawData` 保留。[m

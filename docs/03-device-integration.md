@@ -3,12 +3,18 @@
 ## 当前状态
 
 - 当前产品阶段：网页 Demo。
-- 当前代码状态：尚未实现设备适配层。
+- 当前代码状态：已定义 `DeviceAdapter` 及标准领域类型，尚未实现 Mock 或真实设备适配器。
 - 真实设备：未接入。
 - 厂家接口资料：尚未取得。
 - 17 项正式字段定义：尚未取得。
 
 在正式资料到位前，不得编写或声称存在厂家 API、SDK、DLL、协议、错误码或医学字段映射。
+
+## 当前 DeviceAdapter 契约
+
+我方内部统一接口位于 `src/services/device/DeviceAdapter.ts`，业务错误位于 `src/services/device/DeviceAdapterError.ts`，领域类型位于 `src/domain/`。当前契约覆盖连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取。详细方法、单检测并发规则、轮询责任与错误码见 `docs/04-api-contract.md`。
+
+该契约是未来 Mock 与 Real Adapter 共同遵循的我方标准，不是厂家 API。当前没有任何设备通讯实现，首页也尚未调用此接口。
 
 ## V0.1 Mock 接入计划
 
@@ -18,7 +24,9 @@ UI → Exam Service → DeviceAdapter → MockDeviceAdapter
 
 Mock 的目标是支持网页 Demo 的连接状态、检测阶段、取消、完成结果和可控异常。它不是厂家设备的仿真规范，也不代表真实设备能力。
 
-具体代码位置、启动方式、延迟配置、数据文件位置和异常开关将在 Mock 实现完成后补充。目前统一为 `TBD`。
+未来 Mock 必须遵守“一台设备只有一个活动检测”的契约，并覆盖 `DEVICE_NOT_CONNECTED`、`DEVICE_BUSY`、`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和 `EXAM_ALREADY_FINISHED`。这些是我方业务错误码，不是厂家错误码。
+
+Mock 实现计划放在 `src/services/device/`，但具体文件、启动方式、延迟配置、数据文件位置和异常开关将在 Mock 实现完成后确认。目前统一为 `TBD`。
 
 Mock 数据规则：
 
