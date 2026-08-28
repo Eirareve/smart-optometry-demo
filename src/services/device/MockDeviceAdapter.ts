@@ -10,6 +10,16 @@ import type {
 
 import type { DeviceAdapter } from './DeviceAdapter'
 import { DeviceAdapterError } from './DeviceAdapterError'
+import type { DeviceAdapterErrorCode } from './DeviceAdapterError'
+import type {
+  MockDeviceControl,
+  MockDeviceScenario,
+} from './MockDeviceControl'
+import {
+  DEFAULT_MOCK_DIAGNOSTIC_EVENT_LIMIT,
+  type MockDeviceDiagnostics,
+  type MockDiagnosticEvent,
+} from './MockDeviceDiagnostics'
 
 export interface MockDeviceTiming {
   readonly connectDelayMs: number
@@ -21,6 +31,8 @@ export interface MockDeviceTiming {
 
 export interface MockDeviceAdapterOptions {
   readonly timing?: Partial<MockDeviceTiming>
+  readonly initialScenario?: MockDeviceScenario
+  readonly diagnosticEventLimit?: number
 }
 
 /** 普通 Demo 的集中时间配置，总检测时长为 6 秒。 */
@@ -55,6 +67,14 @@ const ACTIVE_EXAM_STAGES: ReadonlySet<ExamStage> = new Set([
   'analyzing',
 ])
 
+const MOCK_DEVICE_SCENARIOS: ReadonlySet<MockDeviceScenario> = new Set([
+  'normal',
+  'connect_failure',
+  'start_exam_failure',
+  'exam_error',
+  'status_query_failure',
+])
+
 type TerminalExamStage = Extract<ExamStage, 'cancelled' | 'error'>
 
 interface TerminalExamState {
@@ -67,6 +87,7 @@ interface MockExamRecord {
   readonly session: ExamSession
   readonly startedAtMs: number
   terminalState?: TerminalExamState
+  lastDiagnosticStage?: ExamStage
 }
 
 interface ResolvedExamState {
@@ -74,6 +95,10 @@ interface ResolvedExamState {
   readonly progress: number | null
   readonly updatedAtMs: number
   readonly message: string
+}
+
+type MockDiagnosticEventInput = Omit<MockDiagnosticEvent, 'timestamp'> & {
+  readonly timestamp?: string
 }
 
 let nextExamSequence = 0
@@ -119,17 +144,28 @@ function validateTiming(timing: MockDeviceTiming): void {
   }
 }
 
+function validateDiagnosticEventLimit(limit: number): void {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new RangeError('diagnosticEventLimit must be a positive integer')
+  }
+}
+
 /**
  * V0.1 的纯内存模拟设备。它不调用任何厂家 SDK、API 或真实硬件。
  */
-export class MockDeviceAdapter implements DeviceAdapter {
+export class MockDeviceAdapter
+  implements DeviceAdapter, MockDeviceControl, MockDeviceDiagnostics
+{
   private readonly timing: MockDeviceTiming
+  private readonly diagnosticEventLimit: number
   private readonly exams = new Map<string, MockExamRecord>()
+  private readonly diagnosticEvents: MockDiagnosticEvent[] = []
 
   private connectionState: DeviceStatus['connectionState'] = 'disconnected'
   private lastCommunicationAt: string | null = null
   private activeExamId: string | null = null
   private connectionAttempt = 0
+  private scenario: MockDeviceScenario
 
   constructor(options: MockDeviceAdapterOptions = {}) {
     this.timing = {
@@ -137,11 +173,62 @@ export class MockDeviceAdapter implements DeviceAdapter {
       ...options.timing,
     }
     validateTiming(this.timing)
+
+    this.diagnosticEventLimit =
+      options.diagnosticEventLimit ?? DEFAULT_MOCK_DIAGNOSTIC_EVENT_LIMIT
+    validateDiagnosticEventLimit(this.diagnosticEventLimit)
+
+    this.scenario = options.initialScenario ?? 'normal'
+    this.assertScenario(this.scenario)
+  }
+
+  getScenario(): MockDeviceScenario {
+    return this.scenario
+  }
+
+  setScenario(scenario: MockDeviceScenario): void {
+    this.assertScenario(scenario)
+    this.scenario = scenario
+  }
+
+  reset(): void {
+    this.scenario = 'normal'
+
+    if (
+      this.connectionState === 'error' ||
+      this.connectionState === 'connecting'
+    ) {
+      this.connectionAttempt += 1
+      this.connectionState = 'disconnected'
+      this.lastCommunicationAt = null
+    }
+
+    this.appendDiagnosticEvent({
+      type: 'MOCK_RESET',
+      message: 'Mock/Demo 故障控制已恢复为 normal',
+    })
+  }
+
+  getDiagnosticEvents(): readonly MockDiagnosticEvent[] {
+    return this.diagnosticEvents.map((event) => ({ ...event }))
+  }
+
+  clearDiagnosticEvents(): void {
+    this.diagnosticEvents.length = 0
   }
 
   async connect(): Promise<DeviceInfo> {
+    this.appendDiagnosticEvent({
+      type: 'DEVICE_CONNECT_REQUEST',
+      message: '收到 Mock/Demo 设备连接请求',
+    })
+
     if (this.connectionState === 'connected') {
       this.lastCommunicationAt = new Date().toISOString()
+      this.appendDiagnosticEvent({
+        type: 'DEVICE_CONNECTED',
+        message: 'Mock/Demo 设备已处于连接状态',
+      })
       return { ...MOCK_DEVICE_INFO }
     }
 
@@ -153,11 +240,38 @@ export class MockDeviceAdapter implements DeviceAdapter {
       connectionAttempt !== this.connectionAttempt ||
       this.connectionState !== 'connecting'
     ) {
-      throw new Error('Mock/Demo 设备连接已取消')
+      const error = new DeviceAdapterError(
+        'DEVICE_CONNECTION_FAILED',
+        'Mock/Demo 设备连接已取消',
+      )
+      this.appendDiagnosticEvent({
+        type: 'DEVICE_CONNECT_FAILED',
+        message: error.message,
+      })
+      throw error
+    }
+
+    if (this.scenario === 'connect_failure') {
+      this.connectionState = 'error'
+      this.lastCommunicationAt = null
+
+      const error = new DeviceAdapterError(
+        'DEVICE_CONNECTION_FAILED',
+        'Mock/Demo 故障场景：模拟设备连接失败',
+      )
+      this.appendDiagnosticEvent({
+        type: 'DEVICE_CONNECT_FAILED',
+        message: error.message,
+      })
+      throw error
     }
 
     this.connectionState = 'connected'
     this.lastCommunicationAt = new Date().toISOString()
+    this.appendDiagnosticEvent({
+      type: 'DEVICE_CONNECTED',
+      message: 'Mock/Demo 设备连接成功',
+    })
 
     return { ...MOCK_DEVICE_INFO }
   }
@@ -177,6 +291,11 @@ export class MockDeviceAdapter implements DeviceAdapter {
           occurredAtMs: nowMs,
           message: 'Mock/Demo 检测因模拟设备断开而结束',
         }
+        this.recordExamStageDiagnostics(
+          activeExam,
+          record,
+          this.resolveExamState(record, nowMs),
+        )
       }
 
       this.activeExamId = null
@@ -187,6 +306,10 @@ export class MockDeviceAdapter implements DeviceAdapter {
     }
 
     this.connectionState = 'disconnected'
+    this.appendDiagnosticEvent({
+      type: 'DEVICE_DISCONNECTED',
+      message: 'Mock/Demo 设备已断开',
+    })
   }
 
   async getStatus(): Promise<DeviceStatus> {
@@ -216,8 +339,13 @@ export class MockDeviceAdapter implements DeviceAdapter {
   }
 
   async startExam(): Promise<ExamSession> {
+    this.appendDiagnosticEvent({
+      type: 'EXAM_START_REQUEST',
+      message: '收到 Mock/Demo 模拟检测启动请求',
+    })
+
     if (this.connectionState !== 'connected') {
-      throw new DeviceAdapterError(
+      throw this.createStartExamError(
         'DEVICE_NOT_CONNECTED',
         'Mock/Demo 设备尚未连接，无法开始模拟检测',
       )
@@ -226,9 +354,16 @@ export class MockDeviceAdapter implements DeviceAdapter {
     const startedAtMs = Date.now()
 
     if (this.resolveActiveExam(startedAtMs) !== null) {
-      throw new DeviceAdapterError(
+      throw this.createStartExamError(
         'DEVICE_BUSY',
         'Mock/Demo 设备已有正在进行的模拟检测',
+      )
+    }
+
+    if (this.scenario === 'start_exam_failure') {
+      throw this.createStartExamError(
+        'EXAM_START_FAILED',
+        'Mock/Demo 故障场景：模拟检测启动失败',
       )
     }
 
@@ -237,12 +372,26 @@ export class MockDeviceAdapter implements DeviceAdapter {
       startedAt: new Date(startedAtMs).toISOString(),
     }
 
-    this.exams.set(session.examId, {
+    const record: MockExamRecord = {
       session,
       startedAtMs,
-    })
+    }
+
+    this.exams.set(session.examId, record)
     this.activeExamId = session.examId
     this.lastCommunicationAt = session.startedAt
+    const initialState = this.resolveExamState(record, startedAtMs)
+    this.appendDiagnosticEvent({
+      type: 'EXAM_STARTED',
+      message: 'Mock/Demo 模拟检测已创建',
+      examId: session.examId,
+      stage: initialState.stage,
+    })
+    this.recordExamStageDiagnostics(
+      session.examId,
+      record,
+      initialState,
+    )
 
     return { ...session }
   }
@@ -250,7 +399,7 @@ export class MockDeviceAdapter implements DeviceAdapter {
   async cancelExam(examId: string): Promise<void> {
     const record = this.getExamRecord(examId)
     const nowMs = Date.now()
-    const state = this.resolveExamState(record, nowMs)
+    const state = this.resolveAndRecordExamState(examId, record, nowMs)
 
     if (!isActiveExamStage(state.stage)) {
       throw new DeviceAdapterError(
@@ -264,6 +413,11 @@ export class MockDeviceAdapter implements DeviceAdapter {
       occurredAtMs: nowMs,
       message: 'Mock/Demo 模拟检测已取消',
     }
+    this.recordExamStageDiagnostics(
+      examId,
+      record,
+      this.resolveExamState(record, nowMs),
+    )
 
     if (this.activeExamId === examId) {
       this.activeExamId = null
@@ -275,7 +429,21 @@ export class MockDeviceAdapter implements DeviceAdapter {
   async getExamStatus(examId: string): Promise<ExamStatus> {
     const record = this.getExamRecord(examId)
     const nowMs = Date.now()
-    const state = this.resolveExamState(record, nowMs)
+
+    if (this.scenario === 'status_query_failure') {
+      const error = new DeviceAdapterError(
+        'DEVICE_COMMUNICATION_ERROR',
+        'Mock/Demo 故障场景：模拟检测状态查询失败',
+      )
+      this.appendDiagnosticEvent({
+        type: 'EXAM_STATUS_QUERY_FAILED',
+        message: error.message,
+        examId,
+      })
+      throw error
+    }
+
+    const state = this.resolveAndRecordExamState(examId, record, nowMs)
 
     if (!isActiveExamStage(state.stage) && this.activeExamId === examId) {
       this.activeExamId = null
@@ -295,7 +463,7 @@ export class MockDeviceAdapter implements DeviceAdapter {
   async getExamResult(examId: string): Promise<ExamResult> {
     const record = this.getExamRecord(examId)
     const nowMs = Date.now()
-    const state = this.resolveExamState(record, nowMs)
+    const state = this.resolveAndRecordExamState(examId, record, nowMs)
 
     if (state.stage !== 'completed') {
       throw new DeviceAdapterError(
@@ -391,10 +559,18 @@ export class MockDeviceAdapter implements DeviceAdapter {
 
     const record = this.exams.get(this.activeExamId)
 
-    if (
-      record === undefined ||
-      !isActiveExamStage(this.resolveExamState(record, nowMs).stage)
-    ) {
+    if (record === undefined) {
+      this.activeExamId = null
+      return this.activeExamId
+    }
+
+    const state = this.resolveAndRecordExamState(
+      this.activeExamId,
+      record,
+      nowMs,
+    )
+
+    if (!isActiveExamStage(state.stage)) {
       this.activeExamId = null
     }
 
@@ -419,6 +595,22 @@ export class MockDeviceAdapter implements DeviceAdapter {
     const leftEyeEndsAt = preparingEndsAt + this.timing.leftEyeMs
     const rightEyeEndsAt = leftEyeEndsAt + this.timing.rightEyeMs
     const analyzingEndsAt = rightEyeEndsAt + this.timing.analyzingMs
+
+    if (this.scenario === 'exam_error' && elapsedMs >= leftEyeEndsAt) {
+      record.terminalState = {
+        stage: 'error',
+        occurredAtMs: record.startedAtMs + leftEyeEndsAt,
+        message:
+          'Mock/Demo 故障场景：模拟检测在进入右眼采集阶段时失败',
+      }
+
+      return {
+        stage: 'error',
+        progress: null,
+        updatedAtMs: record.terminalState.occurredAtMs,
+        message: record.terminalState.message,
+      }
+    }
 
     if (elapsedMs < preparingEndsAt) {
       return {
@@ -470,6 +662,90 @@ export class MockDeviceAdapter implements DeviceAdapter {
     }
   }
 
+  private resolveAndRecordExamState(
+    examId: string,
+    record: MockExamRecord,
+    nowMs: number,
+  ): ResolvedExamState {
+    const state = this.resolveExamState(record, nowMs)
+    this.recordExamStageDiagnostics(examId, record, state)
+    return state
+  }
+
+  private recordExamStageDiagnostics(
+    examId: string,
+    record: MockExamRecord,
+    state: ResolvedExamState,
+  ): void {
+    if (record.lastDiagnosticStage === state.stage) {
+      return
+    }
+
+    record.lastDiagnosticStage = state.stage
+    const timestamp = new Date(state.updatedAtMs).toISOString()
+
+    this.appendDiagnosticEvent({
+      timestamp,
+      type: 'EXAM_STAGE_CHANGED',
+      message: `Mock/Demo 模拟检测阶段变更为 ${state.stage}`,
+      examId,
+      stage: state.stage,
+    })
+
+    if (state.stage === 'cancelled') {
+      this.appendDiagnosticEvent({
+        timestamp,
+        type: 'EXAM_CANCELLED',
+        message: state.message,
+        examId,
+        stage: state.stage,
+      })
+    }
+
+    if (state.stage === 'error') {
+      this.appendDiagnosticEvent({
+        timestamp,
+        type: 'EXAM_FAILED',
+        message: state.message,
+        examId,
+        stage: state.stage,
+      })
+    }
+  }
+
+  private createStartExamError(
+    code: Extract<
+      DeviceAdapterErrorCode,
+      'DEVICE_NOT_CONNECTED' | 'DEVICE_BUSY' | 'EXAM_START_FAILED'
+    >,
+    message: string,
+  ): DeviceAdapterError {
+    this.appendDiagnosticEvent({
+      type: 'EXAM_START_FAILED',
+      message,
+    })
+    return new DeviceAdapterError(code, message)
+  }
+
+  private appendDiagnosticEvent(event: MockDiagnosticEventInput): void {
+    const { timestamp = new Date().toISOString(), ...details } = event
+
+    this.diagnosticEvents.push({ timestamp, ...details })
+
+    const overflow =
+      this.diagnosticEvents.length - this.diagnosticEventLimit
+
+    if (overflow > 0) {
+      this.diagnosticEvents.splice(0, overflow)
+    }
+  }
+
+  private assertScenario(scenario: MockDeviceScenario): void {
+    if (!MOCK_DEVICE_SCENARIOS.has(scenario)) {
+      throw new RangeError(`Unknown Mock/Demo scenario: ${scenario}`)
+    }
+  }
+
   private createDeviceStatusMessage(
     operatingState: DeviceStatus['operatingState'],
   ): string {
@@ -479,6 +755,10 @@ export class MockDeviceAdapter implements DeviceAdapter {
 
     if (this.connectionState === 'disconnected') {
       return 'Mock/Demo 设备已断开'
+    }
+
+    if (this.connectionState === 'error') {
+      return 'Mock/Demo 设备连接失败'
     }
 
     if (operatingState === 'busy') {

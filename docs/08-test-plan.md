@@ -63,6 +63,33 @@
 - 未完成检测显示“本次检测尚未完成，无法生成报告。”，提供返回检测页面和返回首页，不渲染报告。
 - ResultPage 点击“查看验光报告”进入同一 `examId` 的 ReportPage，报告页再次通过 ExamService 读取标准结果。
 
+## Mobile Responsive Optimization
+
+- 在 320、360、375、390、414、430 和 768px viewport 分别检查 Home、Exam、Result、Report，不出现页面级横向滚动或卡片超出 viewport。
+- Home 在 850px 以下切换为 Brand → Hero → Primary CTA → Device Status Card → Footer 单栏流程；560px 以下 Hero 标题保持 32–42px。
+- “连接设备”“开始智能验光”“取消检测”“查看验光结果”“查看验光报告”“打印报告”和返回类按钮至少 44px 高，移动端按钮之间保留间距。
+- Exam 在手机端按标题/阶段、扫描视觉、进度、步骤、操作按钮显示；扫描视觉不得宽于卡片内容区。
+- Result 在 850px 以下按 OD → OS 单列；metrics 在 320/360px 单列，在 375–560px 紧凑两列，内容允许自然换行而不是省略裁切。
+- Report 在 560px 以下隐藏屏幕表格并显示 OD/OS 卡片与 metrics stacked rows；桌面仍显示原表格。
+- `examId`、报告编号、指标 code/value 使用任意断行策略，构造长标识时不得撑宽页面。
+- viewport meta 只保留一个，包含 `width=device-width`、`initial-scale=1` 和 `viewport-fit=cover`；页面边距使用 iPhone safe-area inset。
+- `@media print` 恢复桌面语义表格、隐藏移动端卡片与页面操作，不受手机 screen CSS 影响。
+- 复核 1440px Home/Exam/Result/Report 保持桌面布局；本阶段不引入 Playwright 或视觉快照依赖。
+
+## Mock Device 故障控制与诊断
+
+- `normal` 继续通过既有连接、阶段推进、取消、结果、17 项指标和 `rawData` 回归测试。
+- `connect_failure` 的 `connect()` 以 `DEVICE_CONNECTION_FAILED` 拒绝；状态不得变为 `connected`，并记录 `DEVICE_CONNECT_FAILED`。
+- `start_exam_failure` 只在设备已连接且空闲时以 `EXAM_START_FAILED` 拒绝；不创建 `ExamSession`、`examId` 或 `EXAM_STARTED` 事件，设备保持空闲，切回 `normal` 后可重新启动。
+- `exam_error` 先正常返回 `examId`，在准备和左眼阶段后进入标准 `ExamStatus.stage = error`；设备释放，`getExamResult()` 仍以 `EXAM_NOT_COMPLETED` 拒绝，并记录关联 `examId` 的 `EXAM_FAILED`。
+- `status_query_failure` 的 `getExamStatus()` 以 `DEVICE_COMMUNICATION_ERROR` 拒绝，不伪造 `ExamStatus.error`；通过真实 `ExamService.watchExam()` 验证 observer `onError` 被调用且轮询停止。
+- `reset()` 把场景恢复为 `normal`，清理连接故障留下的错误/在途连接状态，之后可以正常连接；不把历史失败会话改写为成功。
+- 正常连接至少生成 `DEVICE_CONNECT_REQUEST` 与 `DEVICE_CONNECTED`；启动和阶段事件在存在 `examId` 时可以关联同一标识。
+- 每条诊断事件包含可解析的 ISO 8601 `timestamp`、`type` 和 `message`，可选 `examId` / `stage`；不包含患者信息。
+- 诊断事件超过配置上限后只保留最近事件；默认上限 100，测试使用较小注入上限验证最早事件被移除，并覆盖显式清理。
+- `MockDeviceControl` / `MockDeviceDiagnostics` 不加入 `DeviceAdapter`，React 业务页面与 ExamService 不依赖它们。
+- HomePage、ExamPage、ResultPage、ReportPage 继续不读取 `rawData`；本阶段不改变既有不可见 sentinel / 抛错 getter 覆盖。
+
 ## 后续阶段
 
 整体超时策略、异常数据、重复检测和结果为空等场景，在对应功能实现后补充。
@@ -71,8 +98,7 @@
 
 - TypeScript 类型检查覆盖统一接口与领域类型的语法、导入和导出。
 - lint 覆盖新增 TypeScript 文件的静态规则。
-- 本阶段没有具体 Adapter 行为，因此不伪造连接、取消或结果测试。
-- Mock 与 Real Adapter 实现后应共享契约测试，并分别覆盖连接、状态、取消、结果、错误和 `rawData` 保留。
+- 当前 Mock 测试覆盖连接、状态、取消、结果、确定性故障、诊断事件和 `rawData` 保留；未来 Real Adapter 应在取得正式资料后共享正式契约测试，但不实现 Mock 专用控制测试。
 - 未连接时启动检测返回 `DEVICE_NOT_CONNECTED`。
 - 已有活动检测时再次启动返回 `DEVICE_BUSY`，且不会创建第二个检测。
 - 未知 `examId` 返回 `EXAM_NOT_FOUND`。

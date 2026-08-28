@@ -184,6 +184,28 @@ describe('ExamService', () => {
     expect(getExamStatus).toHaveBeenCalledTimes(1)
   })
 
+  it('reports the deterministic status_query_failure scenario through onError', async () => {
+    const { adapter, service } = await createConnectedService()
+    const session = await service.startExam()
+    const recorder = createObserverRecorder()
+    const getExamStatus = vi.spyOn(adapter, 'getExamStatus')
+    adapter.setScenario('status_query_failure')
+
+    service.watchExam(session.examId, recorder.observer)
+    await flushInitialPoll()
+
+    expect(recorder.statuses).toEqual([])
+    expect(recorder.errors).toEqual([
+      expect.objectContaining({
+        name: 'DeviceAdapterError',
+        code: 'DEVICE_COMMUNICATION_ERROR',
+      }),
+    ])
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 10)
+    expect(getExamStatus).toHaveBeenCalledTimes(1)
+  })
+
   it('stops polling and callbacks after cleanup', async () => {
     const { adapter, service } = await createConnectedService()
     const session = await service.startExam()

@@ -15,6 +15,8 @@ src/domain/result.ts
 src/domain/index.ts
 src/services/device/DeviceAdapter.ts
 src/services/device/DeviceAdapterError.ts
+src/services/device/MockDeviceControl.ts
+src/services/device/MockDeviceDiagnostics.ts
 src/services/device/MockDeviceAdapter.ts
 src/services/device/MockDeviceAdapter.test.ts
 src/services/device/index.ts
@@ -132,7 +134,7 @@ Adapter 返回这些终态时，ExamService 先关闭 watcher，再向当时的�
 
 ## 当前 Mock 实现
 
-`MockDeviceAdapter implements DeviceAdapter`，没有修改上述 7 个方法或领域类型。它是明确标记的纯内存 Demo 数据源，不包含真实厂家名称、型号、接口、协议或硬件能力声明。
+`MockDeviceAdapter implements DeviceAdapter, MockDeviceControl, MockDeviceDiagnostics`，没有修改 `DeviceAdapter` 上述 7 个方法或领域类型。它是明确标记的纯内存 Demo 数据源，不包含真实厂家名称、型号、接口、协议或硬件能力声明。后两个接口只属于 Mock / developer diagnostics，不是未来 Real Adapter 的实现要求。
 
 ### 连接与设备状态
 
@@ -170,6 +172,34 @@ const DEFAULT_MOCK_DEVICE_TIMING = {
 - OS：SPH -2.75、CYL -0.50、AXIS 10。
 - `metrics` 恰好包含 `metric_01`～`metric_17` 和“扩展检测指标 01”～“扩展检测指标 17”，占位值为 `DEMO-01`～`DEMO-17`，不包含医学单位或未经确认的医学含义。
 - `rawData` 必填，包含明确的 `source: mock`、`demo: true` 以及 Mock 内部原始结构。它不属于 UI 数据契约，页面不得依赖其结构。
+
+### Mock-only 控制与诊断接口
+
+以下 API 与 `DeviceAdapter` 并列存在，不是其成员：
+
+```ts
+type MockDeviceScenario =
+  | 'normal'
+  | 'connect_failure'
+  | 'start_exam_failure'
+  | 'exam_error'
+  | 'status_query_failure'
+
+interface MockDeviceControl {
+  getScenario(): MockDeviceScenario
+  setScenario(scenario: MockDeviceScenario): void
+  reset(): void
+}
+
+interface MockDeviceDiagnostics {
+  getDiagnosticEvents(): readonly MockDiagnosticEvent[]
+  clearDiagnosticEvents(): void
+}
+```
+
+`setScenario()` 只选择一个确定性的 Mock 行为，不使用随机故障。`reset()` 恢复 `normal`，并清理连接失败留下的 `error` / 未完成连接尝试；它不修改历史终态或伪造结果。诊断事件只保存在适配器实例内存中，默认保留最近 100 条；每条包含 `timestamp`、`type`、`message`，检测事件可带 `examId` 和 `stage`。读取返回数组和事件对象的副本，清理由 `clearDiagnosticEvents()` 显式完成。
+
+React 业务页面和 `ExamService` 只能依赖正式流程接口，不调用 `MockDeviceControl` / `MockDeviceDiagnostics`。未来 Developer 页面若实现，应在专用装配边界取得这两个能力，并醒目标识为 Mock / Developer Only。诊断事件不是厂家原始通信日志，也不得包含患者信息。
 
 ## 方法语义
 
@@ -238,6 +268,9 @@ preparing | left_eye | right_eye | analyzing
 type DeviceAdapterErrorCode =
   | 'DEVICE_NOT_CONNECTED'
   | 'DEVICE_BUSY'
+  | 'DEVICE_CONNECTION_FAILED'
+  | 'EXAM_START_FAILED'
+  | 'DEVICE_COMMUNICATION_ERROR'
   | 'EXAM_NOT_FOUND'
   | 'EXAM_NOT_COMPLETED'
   | 'EXAM_ALREADY_FINISHED'
@@ -247,11 +280,14 @@ type DeviceAdapterErrorCode =
 |---|---|
 | `DEVICE_NOT_CONNECTED` | 操作要求设备已连接，但当前未连接；例如调用 `startExam()` |
 | `DEVICE_BUSY` | 已有未结束的活动检测，又调用 `startExam()` |
+| `DEVICE_CONNECTION_FAILED` | 数据源连接失败；当前由 `connect_failure` Demo 场景安全模拟 |
+| `EXAM_START_FAILED` | 检测启动请求失败且未创建会话；当前由 `start_exam_failure` Demo 场景安全模拟 |
+| `DEVICE_COMMUNICATION_ERROR` | 单次设备通信或状态查询失败；当前由 `status_query_failure` Demo 场景安全模拟 |
 | `EXAM_NOT_FOUND` | 指定 `examId` 不存在 |
 | `EXAM_NOT_COMPLETED` | 在检测不是 `completed` 时调用 `getExamResult()` |
 | `EXAM_ALREADY_FINISHED` | 对 `completed`、`cancelled` 或 `error` 检测调用 `cancelExam()` |
 
-这些是我方稳定的业务错误码，不是厂家错误码。未来具体 Adapter 应把可识别的厂家失败映射到我方契约；无法安全映射的底层异常仍需显式抛出，不得编造厂家含义。
+这些是我方业务或 Demo/Adapter 层的安全错误码，不是厂家错误码。新增的连接失败、启动失败和通信失败也不对应任何厂家 SDK、协议或返回码。未来具体 Adapter 应依据正式资料把可识别的厂家失败映射到我方契约；无法安全映射的底层异常仍需显式抛出，不得编造厂家含义。
 
 ## 类型契约
 
