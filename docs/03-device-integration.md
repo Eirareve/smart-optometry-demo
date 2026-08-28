@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 当前产品阶段：网页 Demo。
-- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter`；UI 和未来 Exam Service 尚未接入该实现。
+- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter` 和注入式 `ExamService`；两者已在单元测试中协作验证，但 UI 尚未接入。
 - 真实设备：未接入。
 - 厂家接口资料：尚未取得。
 - 17 项正式字段定义：尚未取得。
@@ -14,14 +14,14 @@
 
 我方内部统一接口位于 `src/services/device/DeviceAdapter.ts`，业务错误位于 `src/services/device/DeviceAdapterError.ts`，领域类型位于 `src/domain/`。当前契约覆盖连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取。详细方法、单检测并发规则、轮询责任与错误码见 `docs/04-api-contract.md`。
 
-该契约是当前 Mock 与未来 Real Adapter 共同遵循的我方标准，不是厂家 API。`MockDeviceAdapter` 已实现该契约；首页仍未调用此接口，本阶段没有新增 Exam Service 或页面交互。
+该契约是当前 Mock 与未来 Real Adapter 共同遵循的我方标准，不是厂家 API。`MockDeviceAdapter` 已实现该契约，`ExamService` 只依赖该接口并负责轮询、取消和清理；首页仍未调用这些服务，本阶段没有新增页面交互。
 
 ## V0.1 Mock Device 实现
 
 ```text
-当前：DeviceAdapter → MockDeviceAdapter
+当前测试：ExamService → DeviceAdapter → MockDeviceAdapter
 
-后续页面接入：UI → Exam Service → DeviceAdapter → MockDeviceAdapter
+后续页面接入：UI → ExamService → DeviceAdapter → MockDeviceAdapter
 ```
 
 实现位于 `src/services/device/MockDeviceAdapter.ts`，测试位于 `src/services/device/MockDeviceAdapter.test.ts`。该类是纯内存 Demo 实现，不调用厂家 SDK、API、DLL、通信协议或真实硬件，也不代表真实设备能力。

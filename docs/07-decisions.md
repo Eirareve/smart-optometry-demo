@@ -56,4 +56,4 @@
 - **Context**：当前 Demo 只建模一台设备，且检测需要经历多个阶段；如果允许重复启动或把轮询隐藏在 Adapter/UI 中，会造成状态冲突、无法停止的定时器和伪结果风险。
 - **Decision**：一台设备同时只允许一个活动检测；重复启动返回 `DEVICE_BUSY`。`getExamStatus()` 只返回一次快照，持续轮询由 Exam Service 负责。只有 `completed` 检测可读取结果，取消只作用于进行中检测。
 - **Reason**：让设备状态、单次检测状态和流程编排各自保持单一职责，并让 Mock 与未来 Real Adapter 遵守同一套可测试规则。
-- **Consequence**：具体 Adapter 需要跟踪唯一活动检测并抛出统一业务错误；React 页面不直接轮询，Exam Service 实现前这些规则只存在于 contract 和文档中。
+- **Consequence**：具体 Adapter 需要跟踪唯一活动检测并抛出统一业务错误；当前 ExamService 已落实轮询所有权、终态停止、主动取消和订阅清理，React 页面不直接轮询。页面装配仍留待后续阶段。

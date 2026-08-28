@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约和 `MockDeviceAdapter`；Exam Service、检测流程、结果页和报告页尚未实现，真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter` 和 `ExamService` 验光流程编排层；`ExamService` 尚未接入 UI，检测页、结果页和报告页尚未实现，真实设备未接入。
 
 ## V0.1 分层
 
@@ -10,7 +10,7 @@
 浏览器中的网页 UI
   │  只表达用户意图和渲染状态
   ▼
-Exam Service（后续阶段）
+ExamService（当前已实现，尚未接入 UI）
   │  负责流程、状态机、取消、异常与结果组织
   ▼
 DeviceAdapter
@@ -28,7 +28,16 @@ MockDeviceAdapter（当前已实现）
 
 ### Exam Service
 
-Exam Service 将在后续阶段负责完整检测生命周期、状态转换、轮询或事件协调、取消、异常和结果读取。它依赖 `DeviceAdapter` 接口，而不是某个具体适配器。页面只向 Exam Service 发出意图并消费标准化状态。
+`src/services/exam/ExamService.ts` 已实现 React UI 与设备抽象之间的流程编排层。它通过构造函数接收 `DeviceAdapter`，不会自行创建 `MockDeviceAdapter` 或未来的真实设备实现。当前提供：
+
+- 连接、断开和读取设备状态的业务入口。
+- 启动检测并返回 `ExamSession`，其中 `examId` 继续作为不透明标识传递。
+- 监听检测状态、主动取消以及读取完成结果。
+- 对同一 `examId` 共享唯一轮询链，并向多个观察者发布状态变化。
+- 在 `completed`、`cancelled`、`error` 或状态查询拒绝后停止轮询。
+- 通过单次订阅 cleanup 或服务级 `dispose()` 清理定时器和失效化在途查询。
+
+结果读取只委托 `DeviceAdapter.getExamResult(examId)`；ExamService 不生成、补齐或缓存验光数据。当前首页仍未装配该服务，后续页面只向 ExamService 发出意图并消费标准状态，不直接操作 Adapter 或定时器。
 
 ### DeviceAdapter
 
@@ -63,7 +72,7 @@ src/domain/index.ts   → 领域类型统一导出
 
 `src/services/device/MockDeviceAdapter.ts` 已实现同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、按时间推导的检测阶段、取消和完成结果；其行为不代表真实厂家设备规范。实现用内存 Map 保存检测记录，并用单一 `activeExamId` 保证一台 Mock Device 同时只有一个活动检测。普通 Demo 和测试时间均由同一文件中的配置集中管理。
 
-Mock 尚未接入 UI；后续 Exam Service 应通过 `DeviceAdapter` 类型接收该实例，页面不能直接导入具体实现。未来 Real Adapter 也将在同一装配边界替换 Mock，而不是改写页面。
+Mock 尚未接入 UI；当前 ExamService 测试通过 `DeviceAdapter` 类型注入 `MockDeviceAdapter`，验证了两层可以解耦协作。未来页面装配时，页面仍不能直接导入具体 Adapter；未来 Real Adapter 也在同一装配边界替换 Mock，而不是改写页面或 ExamService。
 
 ## 状态边界
 
@@ -85,7 +94,24 @@ cancelled
 error
 ```
 
-`idle`、`connecting` 和 `ready` 属于未来 Exam Service 组织的完整 UI 流程状态，不与单次检测会话的 `ExamStatus` 混为一谈。页面不得用单一 `loading` 值替代这些状态。
+`idle`、`connecting` 和 `ready` 属于未来 UI 接入时组合的页面流程状态，不与单次检测会话的 `ExamStatus` 混为一谈。本次 ExamService 只发布现有 `ExamStatus` 的七个检测阶段，没有扩展领域枚举；页面不得用单一 `loading` 值替代这些状态。
+
+## 轮询与订阅生命周期
+
+```text
+watchExam(examId, observer)
+  → 立即调用一次 DeviceAdapter.getExamStatus(examId)
+  → 上一次查询完成后，再等待默认 500ms
+  → 查询下一份快照
+  → completed / cancelled / error：发布终态并停止
+  → Promise reject：调用 observer.onError 并停止
+```
+
+轮询采用递归 `setTimeout`，不使用 `setInterval`。因此慢查询没有完成时不会启动下一次查询。同一 `examId` 的多个观察者共享一个 watcher 和一个在途 Promise，不会因为 React 重复订阅而创建多条轮询链。
+
+`watchExam()` 返回幂等 cleanup。移除一个观察者不会影响同一检测的其他观察者；最后一个观察者离开后会清除待执行定时器、删除 watcher，并用 generation 与 Map identity 让已经在途的旧响应失效。`dispose()` 执行相同的服务级清理。cleanup 和 `dispose()` 只表示“不再观察”，不会把设备检测伪装成 `cancelled`；真正取消必须调用 `cancelExam(examId)`。
+
+主动取消时，ExamService 先暂停该检测的后续轮询并失效化旧响应，再调用 Adapter 的 `cancelExam(examId)`。取消成功且仍有观察者时，服务会读取一次 Adapter 的最新状态并发布真实的 `cancelled` 快照；取消失败则恢复原 watcher 并向调用方抛出原错误。
 
 ## 契约不变量
 
@@ -93,7 +119,7 @@ error
 - 当检测处于 `preparing`、`left_eye`、`right_eye` 或 `analyzing` 时，设备为 `busy`；再次启动必须返回 `DEVICE_BUSY`，不能创建并发检测。
 - `getExamResult()` 只有在检测为 `completed` 时才能返回结果；其他阶段返回 `EXAM_NOT_COMPLETED`，不能返回空对象或伪造结果。
 - `cancelExam()` 只取消进行中的检测；成功后该检测进入 `cancelled`，已结束检测返回 `EXAM_ALREADY_FINISHED`。
-- `getExamStatus()` 每次只返回一个快照。持续轮询、停止条件和超时由未来 Exam Service 负责，Adapter 与 React 页面都不创建无限轮询。
+- `getExamStatus()` 每次只返回一个快照。持续轮询、终态停止、查询错误和订阅清理由 ExamService 负责，Adapter 与 React 页面都不创建无限轮询。
 - 所有时间字段使用 ISO 8601 字符串。
 
 ## 数据流

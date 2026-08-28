@@ -9,9 +9,23 @@
 - “开始智能验光”按钮保持不可用，不启动检测。
 - 点击“连接设备”只显示不可用提示，不显示“已连接”。
 
+## ExamService 验光流程编排层
+
+- 使用现有 `MockDeviceAdapter`、`FAST_MOCK_DEVICE_TIMING`、Vitest fake timers 和方法 spy，不创建第二套设备 Mock。
+- 正常状态按 `preparing → left_eye → right_eye → analyzing → completed` 发布。
+- `completed` 发布后 `getExamStatus()` 调用次数不再增加。
+- 主动取消后发布 Adapter 的 `cancelled` 快照，且不再轮询。
+- Mock 检测进入 `error` 后发布该终态，且不再轮询。
+- `getExamStatus()` Promise 拒绝时调用观察者 `onError`，不生成结果，并停止轮询。
+- cleanup 可重复调用；最后一个订阅 cleanup 后没有新查询或回调，在途旧响应不能重新启动定时器。
+- 同一 `examId` 的多个观察者共享一条轮询链；移除一个观察者不影响其他观察者，移除最后一个后停止。
+- 慢查询未完成时不启动第二个 `getExamStatus()`，避免异步重入。
+- `getExamResult(examId)` 原样委托 `DeviceAdapter`，ExamService 不生成、补齐或缓存验光数据。
+- 非正数或非有限轮询间隔应在构造时拒绝。
+
 ## 后续阶段
 
-检测、取消、断线、超时、异常数据、重复检测、页面刷新和结果为空等场景，在对应功能实现后补充。
+检测页面接入、超时策略、异常数据、重复检测、页面刷新和结果为空等场景，在对应功能实现后补充。页面卸载时应调用 `watchExam()` 返回的 cleanup；该行为需要在检测页阶段增加 React 集成测试。
 
 ## DeviceAdapter 抽象层
 
