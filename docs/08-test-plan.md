@@ -4,10 +4,21 @@
 
 - 显示“智能验光系统”标题。
 - 显示 DEMO MODE。
-- 显示设备编号 `OPT-DEMO-001`。
-- 显示“设备未接入”和“暂无通信”。
-- “开始智能验光”按钮保持不可用，不启动检测。
-- 点击“连接设备”只显示不可用提示，不显示“已连接”。
+- 初始显示 Mock Device 未连接和“暂无通信”，“开始智能验光”按钮不可用。
+- 点击“连接设备”后展示连接中、`Smart Optometry Mock Device`、`MOCK-OPT-001`、最后通信时间和已连接状态。
+- 只有设备为 `connected + idle` 时启用“开始智能验光”。
+- 点击“开始智能验光”通过 ExamService 创建会话并进入 `/exam/:examId`；启动失败显示可见错误且允许重试。
+
+## 模拟验光进行页
+
+- 正常状态按 `preparing → left_eye → right_eye → analyzing → completed` 实时呈现。
+- 每个阶段同步更新百分比、左眼、右眼和数据分析状态，并始终显示 `examId` 与 DEMO MODE。
+- `completed` 显示“检测完成”和返回首页入口，不进入结果页或报告页。
+- 点击“取消检测”只调用 ExamService；收到真实 `cancelled` 快照后显示“检测已取消”并允许返回首页。
+- Adapter 返回 `error` 终态时停留在检测页，显示异常说明和返回首页入口。
+- 直接打开 Mock 内存中不存在的 `examId` 时显示清晰错误，不白屏。
+- React 页面卸载时调用 `watchExam()` 返回的 cleanup。
+- 页面不导入或调用 `MockDeviceAdapter`，也不创建 `setInterval` 或其他设备轮询 timer。
 
 ## ExamService 验光流程编排层
 
@@ -25,7 +36,7 @@
 
 ## 后续阶段
 
-检测页面接入、超时策略、异常数据、重复检测、页面刷新和结果为空等场景，在对应功能实现后补充。页面卸载时应调用 `watchExam()` 返回的 cleanup；该行为需要在检测页阶段增加 React 集成测试。
+整体超时策略、异常数据、重复检测、结果为空、结果页与报告页等场景，在对应功能实现后补充。
 
 ## DeviceAdapter 抽象层
 

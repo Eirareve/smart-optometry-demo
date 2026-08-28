@@ -1,5 +1,63 @@
 # 开发日志
 
+## 2026-08-28 — 模拟验光进行页
+
+### 本次目标
+
+实现首页启动模拟检测、`/exam/:examId` 路由和 ExamPage：通过共享 ExamService 实时呈现 `preparing → left_eye → right_eye → analyzing → completed`，支持取消、错误、页面刷新后内存会话丢失与组件卸载 cleanup；不开发结果页、报告页或真实厂家 API，不执行 Git commit。
+
+### 完成内容
+
+- 首页只在设备为 `connected + idle` 时启用“开始智能验光”；点击后调用 `ExamService.startExam()`，取得 Adapter 返回的不透明 `examId` 并导航到 `/exam/:examId`。
+- 新增 `/exam/:examId` 路由和 `ExamPage`，页面从应用级 Context 获取共享 ExamService，不导入或调用 `MockDeviceAdapter`。
+- ExamPage 通过 `ExamService.watchExam()` 获取状态，不创建 `setInterval` 或其他轮询 timer；effect cleanup 调用服务返回的清理函数。
+- 页面实时显示当前检测阶段、进度百分比、左眼状态、右眼状态、数据分析状态、`examId`、DEMO MODE 和非医疗诊断声明。
+- `completed` 只显示“检测完成”和返回首页入口，不读取结果、不导航到结果页。
+- “取消检测”只调用 `ExamService.cancelExam(examId)`；收到 Adapter 的真实 `cancelled` 快照后显示“检测已取消”并允许返回首页。
+- Adapter 返回的 `error` 终态与状态查询拒绝分别处理；直接访问 Mock 内存中不存在的 `examId` 时显示清晰的刷新/内存会话错误，不白屏。
+- 首页新增检测启动中、设备忙和启动失败反馈；浏览器返回首页时会依据标准 `DeviceStatus.operatingState` 决定是否允许再次启动。
+- 新增 ExamPage 5 个 React 集成测试，并把 HomePage 测试扩展到启动导航和启动失败；同步 README、产品范围、架构、API Contract 和测试计划。
+
+### 我做出的决策
+
+- 路由只保存 Adapter 返回的 `examId`，页面不解析其生成规则；写入 URL 时使用 `encodeURIComponent`，读取使用 React Router 动态参数。
+- 检测状态轮询继续全部留在 ExamService；React effect 只负责订阅与 cleanup，页面状态按 `examId` 标记，避免参数变化时渲染旧会话快照。
+- 取消成功后的 `cancelled`、Adapter 标准 `error` 和查询 Promise 拒绝不合并为同一种错误；页面分别给出已取消、检测异常和无法读取记录的反馈。
+- `progress: null` 的取消或错误终态保留最近一次可用进度；直接打开终态记录但没有历史快照时显示 0%，不虚构进度。
+- 本阶段不调用 `getExamResult()`，也不创建 ResultsPage 或 ReportPage。
+
+### Codex 辅助内容
+
+- 完整阅读 `PROJECT_PLAN.md`、`AGENTS.md`、架构、API Contract 和开发日志，复核现有 HomePage、应用级依赖、ExamService、MockDeviceAdapter 与测试。
+- Context7 MCP 在当前环境不可用，改用 React Router 官方文档核对 `useNavigate`、`useParams` 和动态路由用法。
+- 实现页面、路由、状态映射、取消/错误处理、响应式医疗科技风样式、测试和文档。
+- 使用本地浏览器实际点击验证首页连接、启动、动态路由、完整阶段完成和丢失 `examId` 错误页；检查桌面与 390px 窄屏布局，浏览器控制台无 warning/error。
+- 执行 lint、typecheck、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；4 个测试文件、35 个测试全部通过，其中 ExamPage 5 个测试、HomePage 6 个测试。
+- `npm run build`：通过；Vite 完成 84 个模块转换。
+- 浏览器实际流程：通过；首页连接 → 启动检测 → `/exam/:examId` → 完成，以及未知 `examId` 错误页均符合预期。
+- 响应式视觉检查：桌面与 390px 窄屏通过；浏览器控制台无错误或警告。
+- Vitest、Vite dev server 和生产构建在受限沙箱内会因子进程 `spawn EPERM` 无法启动；在获准的沙箱外环境重跑后均通过，该限制与代码或断言失败无关。
+
+### 未解决问题
+
+- ResultsPage 和 ReportPage 按本次范围未开发；检测完成后只显示终态。
+- 当前检测记录只存在于 Mock Device 内存中，浏览器完整刷新会丢失会话；页面已明确提示，但未增加持久化。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续阶段明确授权后，再实现 ResultsPage，并在 `completed` 后按页面生命周期调用 `ExamService.getExamResult(examId)`；报告页继续等待独立阶段。
+
 ## 2026-08-28 — 首页接入共享 Mock Device / ExamService
 
 ### 本次目标

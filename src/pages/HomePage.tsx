@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { useAppDependencies } from '../app/dependencies'
 import { DeviceStatusCard } from '../components/DeviceStatusCard'
 import type {
   DeviceConnectionState,
   DeviceInfo,
+  DeviceOperatingState,
   DeviceStatus,
 } from '../domain'
 
@@ -60,14 +62,19 @@ function BrandMark() {
 
 export function HomePage() {
   const { examService } = useAppDependencies()
+  const navigate = useNavigate()
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
   const [connectionState, setConnectionState] =
     useState<DeviceConnectionState>('disconnected')
   const [lastCommunicationAt, setLastCommunicationAt] = useState<
     string | null
   >(null)
+  const [operatingState, setOperatingState] =
+    useState<DeviceOperatingState>('unknown')
   const [connectionNotice, setConnectionNotice] = useState('')
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [examStartError, setExamStartError] = useState<string | null>(null)
+  const [isStartingExam, setIsStartingExam] = useState(false)
   const requestVersionRef = useRef(0)
 
   useEffect(() => {
@@ -90,6 +97,7 @@ export function HomePage() {
 
         setDeviceInfo(info)
         setConnectionState(status.connectionState)
+        setOperatingState(status.operatingState)
         setLastCommunicationAt(status.lastCommunicationAt)
         setConnectionNotice(status.message ?? '')
         setConnectionError(null)
@@ -99,6 +107,7 @@ export function HomePage() {
         }
 
         setConnectionState('error')
+        setOperatingState('error')
         setConnectionError(
           `读取模拟设备状态失败：${getErrorMessage(error)}`,
         )
@@ -124,6 +133,7 @@ export function HomePage() {
     const requestVersion = ++requestVersionRef.current
 
     setConnectionState('connecting')
+    setOperatingState('unknown')
     setConnectionNotice('正在连接 Mock Device（模拟设备）…')
     setConnectionError(null)
 
@@ -137,6 +147,7 @@ export function HomePage() {
 
       setDeviceInfo(info)
       setConnectionState(status.connectionState)
+      setOperatingState(status.operatingState)
       setLastCommunicationAt(status.lastCommunicationAt)
       setConnectionNotice(status.message ?? 'Mock/Demo 设备已连接。')
     } catch (error) {
@@ -157,15 +168,53 @@ export function HomePage() {
       }
 
       setConnectionState(latestStatus?.connectionState ?? 'error')
+      setOperatingState(latestStatus?.operatingState ?? 'error')
       setLastCommunicationAt(latestStatus?.lastCommunicationAt ?? null)
       setConnectionNotice(latestStatus?.message ?? '')
       setConnectionError(`模拟设备连接失败：${getErrorMessage(error)}`)
     }
   }
 
-  const isDeviceConnected = connectionState === 'connected'
-  const examAvailabilityMessage = isDeviceConnected
-    ? '模拟设备已就绪，可开始检测'
+  const isDeviceReady =
+    connectionState === 'connected' && operatingState === 'idle'
+
+  const handleStartExam = async () => {
+    if (!isDeviceReady || isStartingExam) {
+      return
+    }
+
+    const requestVersion = ++requestVersionRef.current
+
+    setIsStartingExam(true)
+    setExamStartError(null)
+
+    try {
+      const session = await examService.startExam()
+
+      if (requestVersionRef.current !== requestVersion) {
+        return
+      }
+
+      navigate(`/exam/${encodeURIComponent(session.examId)}`)
+    } catch (error) {
+      if (requestVersionRef.current !== requestVersion) {
+        return
+      }
+
+      setExamStartError(`启动模拟检测失败：${getErrorMessage(error)}`)
+    } finally {
+      if (requestVersionRef.current === requestVersion) {
+        setIsStartingExam(false)
+      }
+    }
+  }
+
+  const examAvailabilityMessage = isStartingExam
+    ? '正在创建模拟检测会话…'
+    : isDeviceReady
+      ? '模拟设备已就绪，可开始检测'
+      : connectionState === 'connected' && operatingState === 'busy'
+        ? '模拟设备正在执行检测'
     : connectionState === 'connecting'
       ? '正在建立模拟连接，请稍候'
       : '设备连接后可开始检测'
@@ -207,15 +256,22 @@ export function HomePage() {
             <button
               className="primary-button"
               type="button"
-              disabled={!isDeviceConnected}
+              disabled={!isDeviceReady || isStartingExam}
+              onClick={handleStartExam}
+              aria-busy={isStartingExam}
               aria-describedby="exam-disabled-reason"
             >
-              <span>开始智能验光</span>
+              <span>{isStartingExam ? '正在启动检测' : '开始智能验光'}</span>
               <span className="button-arrow" aria-hidden="true">
                 →
               </span>
             </button>
             <p id="exam-disabled-reason">{examAvailabilityMessage}</p>
+            {examStartError === null ? null : (
+              <p className="exam-start-error" role="alert">
+                {examStartError}
+              </p>
+            )}
           </div>
         </section>
 

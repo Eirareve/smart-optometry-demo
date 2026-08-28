@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter` 和 `ExamService` 验光流程编排层；首页已通过应用级依赖装配接入 `ExamService`，检测页、结果页和报告页尚未实现，真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService` 验光流程编排层和 `/exam/:examId` 模拟验光进行页；结果页和报告页尚未实现，真实设备未接入。
 
 ## V0.1 分层
 
@@ -24,7 +24,9 @@ MockDeviceAdapter（当前已实现）
 
 ### UI
 
-当前首页包含 Demo 标识、设备状态卡和操作入口。它从应用根部 Context 获取共享 `ExamService`，首次渲染读取设备状态，点击连接后依次呈现“正在连接”、Adapter 返回的 `DeviceInfo`、连接状态、最后通信时间和可见错误；只有标准状态为 `connected` 时才启用“开始智能验光”。检测页、结果页、报告页和可选开发调试页不在本阶段实现范围。
+当前首页包含 Demo 标识、设备状态卡和操作入口。它从应用根部 Context 获取共享 `ExamService`，首次渲染读取设备状态，点击连接后依次呈现“正在连接”、Adapter 返回的 `DeviceInfo`、连接状态、最后通信时间和可见错误；只有设备为 `connected + idle` 时才启用“开始智能验光”。点击后调用 `ExamService.startExam()`，取得不透明 `examId` 并导航到 `/exam/:examId`。
+
+`ExamPage` 从同一 Context 获取共享 `ExamService`，通过路由参数取得 `examId`，再调用 `watchExam()` 订阅状态。页面只渲染当前阶段、进度、左眼、右眼、分析、取消和错误状态，不导入 `MockDeviceAdapter`，也不创建 `setInterval` 或其他轮询 timer。组件卸载时执行 `watchExam()` 返回的 cleanup；`completed` 只显示“检测完成”，`cancelled` 和错误状态允许返回首页。直接访问已经不在 Mock 内存中的 `examId` 时，查询拒绝会呈现明确错误页。结果页、报告页和可选开发调试页不在本阶段实现范围。
 
 ### Exam Service
 
@@ -94,7 +96,7 @@ cancelled
 error
 ```
 
-首页使用 `DeviceConnectionState` 明确呈现 `disconnected`、`connecting`、`connected`、`disconnecting` 和 `error`，并把 `connected + idle` 解释为可开始检测。它不把设备连接状态混入单次检测会话的 `ExamStatus`。ExamService 仍只发布现有 `ExamStatus` 的七个检测阶段；未来检测页不得用单一 `loading` 值替代这些状态。
+首页使用 `DeviceConnectionState` 明确呈现 `disconnected`、`connecting`、`connected`、`disconnecting` 和 `error`，并把 `connected + idle` 解释为可开始检测。它不把设备连接状态混入单次检测会话的 `ExamStatus`。ExamPage 直接呈现 ExamService 发布的七个检测阶段，并把初始同步、主动取消中和查询失败作为页面状态分别表达，不使用单一 `loading` 值替代状态机。
 
 ## 轮询与订阅生命周期
 

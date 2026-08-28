@@ -121,4 +121,50 @@ describe('smart optometry home page', () => {
       screen.getByRole('button', { name: /开始智能验光/ }),
     ).toBeEnabled()
   })
+
+  it('starts an exam through ExamService and navigates to ExamPage', async () => {
+    const { dependencies, examService } = createTestDependencies()
+    const startExam = vi.spyOn(examService, 'startExam')
+
+    renderHome(dependencies)
+
+    fireEvent.click(screen.getByRole('button', { name: '连接设备' }))
+    expect(
+      await screen.findByText('Smart Optometry Mock Device'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /开始智能验光/ }),
+    )
+
+    expect(await screen.findByText('检测编号')).toBeInTheDocument()
+    expect(screen.getByText(/^MOCK-EXAM-/)).toBeInTheDocument()
+    expect(screen.getByText('DEMO MODE')).toBeInTheDocument()
+    expect(startExam).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a visible error when starting an exam fails', async () => {
+    const { dependencies, examService } = createTestDependencies()
+
+    vi.spyOn(examService, 'startExam').mockRejectedValueOnce(
+      new Error('模拟设备忙碌'),
+    )
+    renderHome(dependencies)
+
+    fireEvent.click(screen.getByRole('button', { name: '连接设备' }))
+    expect(
+      await screen.findByText('Smart Optometry Mock Device'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /开始智能验光/ }),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '启动模拟检测失败：模拟设备忙碌',
+    )
+    expect(
+      screen.getByRole('button', { name: /开始智能验光/ }),
+    ).toBeEnabled()
+  })
 })

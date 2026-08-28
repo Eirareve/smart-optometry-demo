@@ -4,7 +4,7 @@
 
 本文记录网页 Demo 内部的 TypeScript 流程服务与设备契约。`ExamService` 位于 React UI 和 `DeviceAdapter` 之间；`DeviceAdapter` 用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对上层提供的能力。本文**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
 
-当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页已通过应用级共享依赖接入 `ExamService` 的连接和设备状态入口。真实设备通讯、HTTP API、本地设备桥接服务、检测页、结果页和报告页均未实现。
+当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页与 `/exam/:examId` 检测页均通过应用级共享依赖使用同一 ExamService。真实设备通讯、HTTP API、本地设备桥接服务、结果页和报告页均未实现。
 
 ## 代码位置
 
@@ -23,6 +23,11 @@ src/services/exam/ExamService.test.ts
 src/services/exam/index.ts
 src/app/dependencies.ts
 src/app/AppDependenciesProvider.tsx
+src/app/router.tsx
+src/pages/HomePage.tsx
+src/pages/ExamPage.tsx
+src/app/HomePage.test.tsx
+src/app/ExamPage.test.tsx
 ```
 
 ## DeviceAdapter 接口
@@ -374,6 +379,9 @@ V0.1 Mock 实现未来生成的未知 17 项必须遵守：
 - 发出连接、开始、取消等用户意图。
 - 呈现 Exam Service 提供的状态和标准结果。
 - 对所有 Mock 状态和结果显示“模拟数据”或 “DEMO”声明。
+- 首页调用 `startExam()` 后只把返回的不透明 `examId` 编码进 `/exam/:examId`，不解析其格式。
+- ExamPage 在 React effect 中调用 `watchExam()`，并在 cleanup 中释放订阅；页面不创建轮询 timer。
+- `completed`、`cancelled`、Adapter `error` 终态和状态查询拒绝分别呈现；内存中不存在的 `examId` 显示可返回首页的错误状态。
 
 UI 不直接实例化或调用具体 Adapter，也不解析厂家原始字段。
 
