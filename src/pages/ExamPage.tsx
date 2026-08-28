@@ -277,7 +277,7 @@ export function ExamPage() {
 
           {stage === 'completed' ? (
             <p className="exam-terminal-note">
-              检测完成。本阶段暂不展示检测结果或报告。
+              本次模拟检测已完成，可以查看标准化验光结果。
             </p>
           ) : null}
           {stage === 'cancelled' ? (
@@ -348,7 +348,26 @@ export function ExamPage() {
             </p>
           )}
 
-          {isTerminalStage ? (
+          {stage === 'completed' ? (
+            <div className="exam-completed-actions">
+              <button
+                className="exam-results-button"
+                type="button"
+                onClick={() =>
+                  navigate(`/results/${encodeURIComponent(examId)}`)
+                }
+              >
+                查看验光结果
+              </button>
+              <button
+                className="exam-home-button"
+                type="button"
+                onClick={() => navigate('/')}
+              >
+                返回首页
+              </button>
+            </div>
+          ) : isTerminalStage ? (
             <button
               className="exam-home-button"
               type="button"

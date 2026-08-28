@@ -1,5 +1,63 @@
 # 开发日志
 
+## 2026-08-28 — 验光结果页面
+
+### 本次目标
+
+只实现 `/results/:examId` 与 ResultPage：让 completed ExamPage 导航到结果页，通过共享 `ExamService.getExamResult(examId)` 获取标准 `ExamResult`，展示左右眼屈光数据、17 项扩展指标、时间、来源、模拟数据声明与错误状态；不开发 ReportPage、PDF、AI 分析、真实厂家 API 或数据库，不修改 DeviceAdapter contract，不执行 Git commit。
+
+### 完成内容
+
+- 新增 `/results/:examId` 路由和 `ResultPage`，页面从应用级 Context 获取共享 ExamService，不导入或调用 `MockDeviceAdapter`。
+- ExamPage 的 `completed` 状态新增“查看验光结果”主按钮，携带同一不透明 `examId` 导航到结果页；取消与错误终态仍不提供结果入口。
+- ResultPage 挂载后调用 `ExamService.getExamResult(examId)`；加载期间显示明确 loading，成功后只消费标准结果字段。
+- 新增 `EyeResultCard`，分栏展示 OD / OS 的 SPH、CYL、AXIS；屈光度正数带 `+`、负数保留 `-`、零显示 `0.00 D`，AXIS 使用合理数字格式并带 `°`。
+- Mock 结果正确显示 OD `-2.50 D / -0.75 D / 175°` 与 OS `-2.75 D / -0.50 D / 10°`。
+- 新增 `MetricGrid`，直接遍历 `ExamResult.metrics`；当前 17 项全部显示 Adapter 提供的中性名称和值，`unknown` 显示“待定义”，页面不自行创建指标或生成医学判断。
+- 页面显示 `examId`、检测开始时间、检测完成时间和 `source: mock` 对应的 `Mock Device`，顶部同时显示 `DEMO MODE` 与“模拟数据”。
+- 页面底部显示完整模拟数据非医疗用途声明，提供“重新检测”“返回首页”和 disabled 的“生成报告（下一阶段）”；没有创建报告路由或真实功能。
+- `EXAM_NOT_FOUND` 显示“无法读取本次检测结果”和内存记录已不存在说明；`EXAM_NOT_COMPLETED` 显示“检测尚未完成”，不返回假结果；其他读取失败也有可返回首页的错误状态。
+- 新增 ResultPage 6 个测试，并补充 ExamPage completed 导航测试；同步 README、产品范围、架构、设备接入、API Contract 与测试计划。
+
+### 我做出的决策
+
+- 现有 DeviceAdapter 与 ExamService contract 能完整支持本阶段，没有发现明确 Bug，因此不修改任何 contract、领域类型或 Mock 底层数据结构。
+- 页面结果状态按路由 `examId` 关联，并用请求版本让卸载、StrictMode 重挂载或参数变化后的旧 Promise 失效，避免旧结果覆盖新页面。
+- 17 项扩展指标完全以 `ExamResult.metrics` 为输入；组件只格式化已有的 `value`、可选 `unit` 和状态文案，不补齐数量、不改名、不解释医学意义。
+- `rawData` 继续由 Adapter 保留，但 ResultPage 不引用该字段；它不是标准 UI 字段缺失时的回退来源。
+- 报告入口只保留 disabled 布局占位，避免用户误以为 ReportPage 或 PDF 已实现。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划、代理约束、产品范围、架构、设备接入说明、API Contract、既有开发日志及相关源码与测试。
+- 实现结果页、可复用结果组件、路由、completed 导航、响应式医疗科技风样式、加载与错误状态、自动化测试和文档更新。
+- 使用本地浏览器实际验证首页连接、启动检测、完整阶段、结果页导航、OD/OS 数值、17 项指标、刷新后内存记录丢失错误和 390px 窄屏布局；控制台无 warning/error，页面无横向溢出。
+- 执行 lint、typecheck、完整测试和生产构建，并复核 diff、范围与术语。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；5 个测试文件、42 个测试全部通过，其中 ResultPage 新增 6 个测试，ExamPage 新增 completed → ResultPage 导航覆盖。
+- `npm run build`：通过；Vite 完成 87 个模块转换。
+- 浏览器实际流程：通过；首页连接 → 启动检测 → `/exam/:examId` → completed → `/results/:examId`，标准数据、操作入口与刷新错误均符合预期。
+- 响应式视觉检查：桌面与 390px 窄屏通过；窄屏文档宽度未超出视口，浏览器控制台无错误或警告。
+- Vitest、Vite dev server 和生产构建在受限沙箱内因子进程 `spawn EPERM` 无法启动；在获准的沙箱外环境重跑后均通过，该限制与代码或断言失败无关。
+
+### 未解决问题
+
+- ReportPage、PDF 和 AI 分析按本次范围未开发；“生成报告（下一阶段）”保持禁用。
+- Mock Device 记录仍只存在于内存中，浏览器完整刷新会丢失会话；结果页已明确提示，但未增加持久化或数据库。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续阶段明确授权后再实现 ReportPage；在此之前不增加报告路由、PDF、AI 分析或真实设备接入。
+
 ## 2026-08-28 — 模拟验光进行页
 
 ### 本次目标

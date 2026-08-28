@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 
 import { ExamPage } from '../pages/ExamPage'
 import { HomePage } from '../pages/HomePage'
+import { ResultPage } from '../pages/ResultPage'
 import { AppDependenciesProvider } from './AppDependenciesProvider'
 import type { AppDependencies } from './dependencies'
 
@@ -10,6 +11,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/exam/:examId" element={<ExamPage />} />
+      <Route path="/results/:examId" element={<ResultPage />} />
     </Routes>
   )
 }
