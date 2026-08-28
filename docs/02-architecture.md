@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约和 `MockDeviceAdapter`；Exam Service、检测流程、结果页和报告页尚未实现，真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService` 验光流程编排层和 `/exam/:examId` 模拟验光进行页；结果页和报告页尚未实现，真实设备未接入。
 
 ## V0.1 分层
 
@@ -10,7 +10,7 @@
 浏览器中的网页 UI
   │  只表达用户意图和渲染状态
   ▼
-Exam Service（后续阶段）
+ExamService（当前已接入首页）
   │  负责流程、状态机、取消、异常与结果组织
   ▼
 DeviceAdapter
@@ -24,11 +24,22 @@ MockDeviceAdapter（当前已实现）
 
 ### UI
 
-当前已实现首页，包含 Demo 标识、设备状态卡和操作入口。首页仍只呈现明确的“设备未接入”静态状态，尚未连接 `DeviceAdapter`。检测页、结果页、报告页和可选开发调试页不在本阶段实现范围。
+当前首页包含 Demo 标识、设备状态卡和操作入口。它从应用根部 Context 获取共享 `ExamService`，首次渲染读取设备状态，点击连接后依次呈现“正在连接”、Adapter 返回的 `DeviceInfo`、连接状态、最后通信时间和可见错误；只有设备为 `connected + idle` 时才启用“开始智能验光”。点击后调用 `ExamService.startExam()`，取得不透明 `examId` 并导航到 `/exam/:examId`。
+
+`ExamPage` 从同一 Context 获取共享 `ExamService`，通过路由参数取得 `examId`，再调用 `watchExam()` 订阅状态。页面只渲染当前阶段、进度、左眼、右眼、分析、取消和错误状态，不导入 `MockDeviceAdapter`，也不创建 `setInterval` 或其他轮询 timer。组件卸载时执行 `watchExam()` 返回的 cleanup；`completed` 只显示“检测完成”，`cancelled` 和错误状态允许返回首页。直接访问已经不在 Mock 内存中的 `examId` 时，查询拒绝会呈现明确错误页。结果页、报告页和可选开发调试页不在本阶段实现范围。
 
 ### Exam Service
 
-Exam Service 将在后续阶段负责完整检测生命周期、状态转换、轮询或事件协调、取消、异常和结果读取。它依赖 `DeviceAdapter` 接口，而不是某个具体适配器。页面只向 Exam Service 发出意图并消费标准化状态。
+`src/services/exam/ExamService.ts` 已实现 React UI 与设备抽象之间的流程编排层。它通过构造函数接收 `DeviceAdapter`，不会自行创建 `MockDeviceAdapter` 或未来的真实设备实现。当前提供：
+
+- 连接、断开和读取设备状态的业务入口。
+- 启动检测并返回 `ExamSession`，其中 `examId` 继续作为不透明标识传递。
+- 监听检测状态、主动取消以及读取完成结果。
+- 对同一 `examId` 共享唯一轮询链，并向多个观察者发布状态变化。
+- 在 `completed`、`cancelled`、`error` 或状态查询拒绝后停止轮询。
+- 通过单次订阅 cleanup 或服务级 `dispose()` 清理定时器和失效化在途查询。
+
+结果读取只委托 `DeviceAdapter.getExamResult(examId)`；ExamService 不生成、补齐或缓存验光数据。当前首页已通过 Context 使用其连接和设备状态入口；后续页面也只向同一个 ExamService 发出意图并消费标准状态，不直接操作 Adapter 或定时器。
 
 ### DeviceAdapter
 
@@ -63,7 +74,7 @@ src/domain/index.ts   → 领域类型统一导出
 
 `src/services/device/MockDeviceAdapter.ts` 已实现同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、按时间推导的检测阶段、取消和完成结果；其行为不代表真实厂家设备规范。实现用内存 Map 保存检测记录，并用单一 `activeExamId` 保证一台 Mock Device 同时只有一个活动检测。普通 Demo 和测试时间均由同一文件中的配置集中管理。
 
-Mock 尚未接入 UI；后续 Exam Service 应通过 `DeviceAdapter` 类型接收该实例，页面不能直接导入具体实现。未来 Real Adapter 也将在同一装配边界替换 Mock，而不是改写页面。
+Mock 已在 `src/app/dependencies.ts` 创建一次并注入共享 `ExamService`。根部 `AppDependenciesProvider` 在路由外提供该服务，因此页面切换只会挂载或卸载页面组件，不会重建内存 Adapter，Adapter 中的连接状态和 `examId` 记录仍保留。页面不导入具体 Adapter；未来 Real Adapter 也只在该装配边界替换，而不是改写页面或 ExamService。
 
 ## 状态边界
 
@@ -85,7 +96,24 @@ cancelled
 error
 ```
 
-`idle`、`connecting` 和 `ready` 属于未来 Exam Service 组织的完整 UI 流程状态，不与单次检测会话的 `ExamStatus` 混为一谈。页面不得用单一 `loading` 值替代这些状态。
+首页使用 `DeviceConnectionState` 明确呈现 `disconnected`、`connecting`、`connected`、`disconnecting` 和 `error`，并把 `connected + idle` 解释为可开始检测。它不把设备连接状态混入单次检测会话的 `ExamStatus`。ExamPage 直接呈现 ExamService 发布的七个检测阶段，并把初始同步、主动取消中和查询失败作为页面状态分别表达，不使用单一 `loading` 值替代状态机。
+
+## 轮询与订阅生命周期
+
+```text
+watchExam(examId, observer)
+  → 立即调用一次 DeviceAdapter.getExamStatus(examId)
+  → 上一次查询完成后，再等待默认 500ms
+  → 查询下一份快照
+  → completed / cancelled / error：发布终态并停止
+  → Promise reject：调用 observer.onError 并停止
+```
+
+轮询采用递归 `setTimeout`，不使用 `setInterval`。因此慢查询没有完成时不会启动下一次查询。同一 `examId` 的多个观察者共享一个 watcher 和一个在途 Promise，不会因为 React 重复订阅而创建多条轮询链。
+
+`watchExam()` 返回幂等 cleanup。移除一个观察者不会影响同一检测的其他观察者；最后一个观察者离开后会清除待执行定时器、删除 watcher，并用 generation 与 Map identity 让已经在途的旧响应失效。`dispose()` 执行相同的服务级清理。cleanup 和 `dispose()` 只表示“不再观察”，不会把设备检测伪装成 `cancelled`；真正取消必须调用 `cancelExam(examId)`。
+
+主动取消时，ExamService 先暂停该检测的后续轮询并失效化旧响应，再调用 Adapter 的 `cancelExam(examId)`。取消成功且仍有观察者时，服务会读取一次 Adapter 的最新状态并发布真实的 `cancelled` 快照；取消失败则恢复原 watcher 并向调用方抛出原错误。
 
 ## 契约不变量
 
@@ -93,7 +121,7 @@ error
 - 当检测处于 `preparing`、`left_eye`、`right_eye` 或 `analyzing` 时，设备为 `busy`；再次启动必须返回 `DEVICE_BUSY`，不能创建并发检测。
 - `getExamResult()` 只有在检测为 `completed` 时才能返回结果；其他阶段返回 `EXAM_NOT_COMPLETED`，不能返回空对象或伪造结果。
 - `cancelExam()` 只取消进行中的检测；成功后该检测进入 `cancelled`，已结束检测返回 `EXAM_ALREADY_FINISHED`。
-- `getExamStatus()` 每次只返回一个快照。持续轮询、停止条件和超时由未来 Exam Service 负责，Adapter 与 React 页面都不创建无限轮询。
+- `getExamStatus()` 每次只返回一个快照。持续轮询、终态停止、查询错误和订阅清理由 ExamService 负责，Adapter 与 React 页面都不创建无限轮询。
 - 所有时间字段使用 ISO 8601 字符串。
 
 ## 数据流

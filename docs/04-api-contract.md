@@ -1,10 +1,10 @@
-# DeviceAdapter API Contract
+# ExamService 与 DeviceAdapter API Contract
 
 ## 范围与状态
 
-本文记录网页 Demo 内部的 TypeScript 设备契约。它用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对 Exam Service 提供的能力，**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
+本文记录网页 Demo 内部的 TypeScript 流程服务与设备契约。`ExamService` 位于 React UI 和 `DeviceAdapter` 之间；`DeviceAdapter` 用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对上层提供的能力。本文**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
 
-当前已完成类型、接口定义和 `MockDeviceAdapter` 内存实现；尚未实现真实设备通讯、HTTP API、本地设备桥接服务、Exam Service 或 UI 接入。
+当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页与 `/exam/:examId` 检测页均通过应用级共享依赖使用同一 ExamService。真实设备通讯、HTTP API、本地设备桥接服务、结果页和报告页均未实现。
 
 ## 代码位置
 
@@ -18,9 +18,19 @@ src/services/device/DeviceAdapterError.ts
 src/services/device/MockDeviceAdapter.ts
 src/services/device/MockDeviceAdapter.test.ts
 src/services/device/index.ts
+src/services/exam/ExamService.ts
+src/services/exam/ExamService.test.ts
+src/services/exam/index.ts
+src/app/dependencies.ts
+src/app/AppDependenciesProvider.tsx
+src/app/router.tsx
+src/pages/HomePage.tsx
+src/pages/ExamPage.tsx
+src/app/HomePage.test.tsx
+src/app/ExamPage.test.tsx
 ```
 
-## 接口
+## DeviceAdapter 接口
 
 ```ts
 export interface DeviceAdapter {
@@ -36,6 +46,80 @@ export interface DeviceAdapter {
 
 所有方法均为异步接口，以兼容 Mock 延迟、未来本地桥接服务或厂家正式接口。`examId` 是 Adapter 返回的不透明标识；调用方只负责原样传递，不依赖其格式。
 
+## ExamService 接口
+
+```ts
+export interface ExamServiceOptions {
+  readonly pollIntervalMs?: number
+}
+
+export interface ExamObserver {
+  readonly onStatus: (status: ExamStatus) => void
+  readonly onError: (error: unknown) => void
+}
+
+export class ExamService {
+  constructor(adapter: DeviceAdapter, options?: ExamServiceOptions)
+
+  connect(): Promise<DeviceInfo>
+  disconnect(): Promise<void>
+  getDeviceStatus(): Promise<DeviceStatus>
+
+  startExam(): Promise<ExamSession>
+  watchExam(examId: string, observer: ExamObserver): () => void
+  cancelExam(examId: string): Promise<void>
+  getExamResult(examId: string): Promise<ExamResult>
+
+  dispose(): void
+}
+```
+
+构造函数必须由应用装配位置传入 `DeviceAdapter`。ExamService 不导入、创建或判断 `MockDeviceAdapter` / 未来 `RealDeviceAdapter`，因此更换设备实现不会改变服务 API。默认轮询间隔为 `500ms`；测试或装配位置可以传入正有限数覆盖，`0`、负数、`NaN` 和无穷值会被拒绝。
+
+### 连接、启动和结果
+
+| 方法 | 行为 |
+|---|---|
+| `connect()` | 委托 `DeviceAdapter.connect()` 并返回标准 `DeviceInfo` |
+| `disconnect()` | 先清理全部 watcher，再委托 `DeviceAdapter.disconnect()` |
+| `getDeviceStatus()` | 委托 `DeviceAdapter.getStatus()` 返回单次设备快照 |
+| `startExam()` | 委托 `DeviceAdapter.startExam()`，原样返回含不透明 `examId` 的 `ExamSession` |
+| `getExamResult(examId)` | 只委托 `DeviceAdapter.getExamResult(examId)`，不缓存、补齐或生成结果 |
+
+ExamService 不在 `completed` 时自动获取结果。页面后续收到完成状态后，可按页面生命周期显式调用 `getExamResult(examId)`；结果是否可读仍遵守 Adapter 的 `completed` 前置条件。
+
+### watchExam 与轮询
+
+`watchExam(examId, observer)` 注册状态观察者并立即发起第一次 `getExamStatus(examId)`。后续使用递归 `setTimeout`：只有上一次 Promise 已经完成，才等待轮询间隔并发起下一次查询，因此不会出现同一 watcher 的异步查询重入。
+
+服务只在阶段、进度或消息发生变化时调用 `observer.onStatus(status)`，不因 `updatedAt` 单独变化而重复发布相同业务状态。较晚加入同一活动 watcher 的新观察者会立即收到已缓存的最近一次标准状态。
+
+同一 `examId` 只创建一个 watcher：
+
+- 多个不同观察者共享同一计时器和同一个在途查询。
+- 同一观察者重复注册时使用引用计数，不重复发送相同回调，也不会创建新轮询。
+- 每次调用都返回幂等 cleanup；cleanup 只释放本次注册。
+- 最后一个观察者离开后，清除待执行定时器并删除 watcher。
+- generation 和 Map identity 会让 cleanup、取消或终态之后返回的旧 Promise 失效；旧响应不能再通知页面或重启定时器。
+
+以下为轮询停止条件：
+
+```text
+completed | cancelled | error
+```
+
+Adapter 返回这些终态时，ExamService 先关闭 watcher，再向当时的观察者发布最后一份标准 `ExamStatus`。状态查询 Promise 拒绝时，不伪造 Adapter 状态；服务关闭 watcher，并把原始错误交给每个观察者的 `onError(error)`。二者语义不同：Adapter 返回的 `stage: error` 属于标准检测终态，通信或查询拒绝属于观察错误。
+
+### 主动取消与 cleanup
+
+`cancelExam(examId)` 是设备业务操作，cleanup 是本地订阅操作，两者不能互换：
+
+- 主动取消先暂停 watcher、清除待执行 timer，并失效化旧查询响应。
+- 然后调用 `DeviceAdapter.cancelExam(examId)`。
+- 取消成功且仍有观察者时，等待旧在途查询结束，再读取一次 Adapter 最新快照并发布 `cancelled`；不会合成取消状态。
+- 取消失败时恢复原 watcher，并向 `cancelExam()` 调用方抛出原错误。
+- cleanup 或 `dispose()` 只停止观察，不调用 Adapter 取消，也不把仍在设备执行的检测标记为 `cancelled`。
+
 ## 当前 Mock 实现
 
 `MockDeviceAdapter implements DeviceAdapter`，没有修改上述 7 个方法或领域类型。它是明确标记的纯内存 Demo 数据源，不包含真实厂家名称、型号、接口、协议或硬件能力声明。
@@ -45,7 +129,7 @@ export interface DeviceAdapter {
 - 初始状态为 `connectionState: disconnected`、`operatingState: unknown`。
 - `connect()` 使用集中配置的短暂延迟，返回 `MOCK-OPT-001` / `Smart Optometry Mock Device`。
 - 连接成功后按当前契约返回 `connectionState: connected`、`operatingState: idle`，并在 `message` 中明确设备为 Mock/Demo 且已就绪。
-- `ready` 不是 `DeviceStatus` 的枚举值；它仍属于未来 Exam Service 组织的 UI 流程状态，因此本次没有扩展或修改 contract。
+- `ready` 不是 `DeviceStatus` 的枚举值；它属于未来 UI 接入时组合的页面流程状态，因此当前 ExamService 没有扩展或修改 contract。
 - 活动检测期间 `operatingState` 为 `busy` 并携带 `activeExamId`；终止后恢复 `idle`。
 - `disconnect()` 后为 `disconnected`；若断开时存在活动检测，Mock 将该检测安全终止为 `error`。该行为只属于 Demo，不表示真实设备规范。
 
@@ -134,7 +218,7 @@ preparing | left_eye | right_eye | analyzing
 
 `getExamStatus(examId)` 每次调用只读取并返回一份状态快照。它不在 `DeviceAdapter` 内部创建定时器或无限轮询。
 
-后续持续查询的频率、停止条件、超时、取消定时器和错误处理由 Exam Service 负责。React 页面只消费 Exam Service 提供的应用状态，不直接实现轮询。
+持续查询的频率、终态停止、取消定时器、订阅 cleanup 和查询错误处理由 ExamService 负责。当前服务尚未增加整体检测超时策略；React 页面只消费 ExamService 提供的状态和错误，不直接实现轮询。
 
 ## 业务错误模型
 
@@ -207,7 +291,7 @@ type DeviceAdapterErrorCode =
 preparing | left_eye | right_eye | analyzing | completed | cancelled | error
 ```
 
-这些只表示单次检测会话的阶段。设备是否连接、空闲、忙碌或异常由 `DeviceStatus` 表示；`idle`、`connecting` 和 `ready` 由未来 Exam Service 结合两类状态组织，不属于 `ExamStatus`。
+这些只表示单次检测会话的阶段。设备是否连接、空闲、忙碌或异常由 `DeviceStatus` 表示；`idle`、`connecting` 和 `ready` 由未来 UI 接入时结合两类状态组织，不属于 `ExamStatus`。
 
 ### 时间字段
 
@@ -285,8 +369,9 @@ V0.1 Mock 实现未来生成的未知 17 项必须遵守：
 ### Exam Service 负责
 
 - 组合连接状态与检测状态机。
-- 调用时序、有限轮询或未来事件订阅，并负责停止条件和超时。
-- 取消、超时、重试和错误转换策略。
+- 当前通过有限轮询组织调用时序，负责终态停止、重复监听共享、订阅 cleanup 和查询错误上报。
+- 主动取消，并在成功后读取 Adapter 的真实终态快照。
+- 未来需要时再增加整体检测超时和重试策略；本阶段不提前实现。
 - 向 UI 提供与具体 Adapter 无关的应用状态。
 
 ### UI 负责
@@ -294,6 +379,9 @@ V0.1 Mock 实现未来生成的未知 17 项必须遵守：
 - 发出连接、开始、取消等用户意图。
 - 呈现 Exam Service 提供的状态和标准结果。
 - 对所有 Mock 状态和结果显示“模拟数据”或 “DEMO”声明。
+- 首页调用 `startExam()` 后只把返回的不透明 `examId` 编码进 `/exam/:examId`，不解析其格式。
+- ExamPage 在 React effect 中调用 `watchExam()`，并在 cleanup 中释放订阅；页面不创建轮询 timer。
+- `completed`、`cancelled`、Adapter `error` 终态和状态查询拒绝分别呈现；内存中不存在的 `examId` 显示可返回首页的错误状态。
 
 UI 不直接实例化或调用具体 Adapter，也不解析厂家原始字段。
 

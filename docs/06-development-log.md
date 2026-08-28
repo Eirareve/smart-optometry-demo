@@ -1,5 +1,178 @@
 # 开发日志
 
+## 2026-08-28 — 模拟验光进行页
+
+### 本次目标
+
+实现首页启动模拟检测、`/exam/:examId` 路由和 ExamPage：通过共享 ExamService 实时呈现 `preparing → left_eye → right_eye → analyzing → completed`，支持取消、错误、页面刷新后内存会话丢失与组件卸载 cleanup；不开发结果页、报告页或真实厂家 API，不执行 Git commit。
+
+### 完成内容
+
+- 首页只在设备为 `connected + idle` 时启用“开始智能验光”；点击后调用 `ExamService.startExam()`，取得 Adapter 返回的不透明 `examId` 并导航到 `/exam/:examId`。
+- 新增 `/exam/:examId` 路由和 `ExamPage`，页面从应用级 Context 获取共享 ExamService，不导入或调用 `MockDeviceAdapter`。
+- ExamPage 通过 `ExamService.watchExam()` 获取状态，不创建 `setInterval` 或其他轮询 timer；effect cleanup 调用服务返回的清理函数。
+- 页面实时显示当前检测阶段、进度百分比、左眼状态、右眼状态、数据分析状态、`examId`、DEMO MODE 和非医疗诊断声明。
+- `completed` 只显示“检测完成”和返回首页入口，不读取结果、不导航到结果页。
+- “取消检测”只调用 `ExamService.cancelExam(examId)`；收到 Adapter 的真实 `cancelled` 快照后显示“检测已取消”并允许返回首页。
+- Adapter 返回的 `error` 终态与状态查询拒绝分别处理；直接访问 Mock 内存中不存在的 `examId` 时显示清晰的刷新/内存会话错误，不白屏。
+- 首页新增检测启动中、设备忙和启动失败反馈；浏览器返回首页时会依据标准 `DeviceStatus.operatingState` 决定是否允许再次启动。
+- 新增 ExamPage 5 个 React 集成测试，并把 HomePage 测试扩展到启动导航和启动失败；同步 README、产品范围、架构、API Contract 和测试计划。
+
+### 我做出的决策
+
+- 路由只保存 Adapter 返回的 `examId`，页面不解析其生成规则；写入 URL 时使用 `encodeURIComponent`，读取使用 React Router 动态参数。
+- 检测状态轮询继续全部留在 ExamService；React effect 只负责订阅与 cleanup，页面状态按 `examId` 标记，避免参数变化时渲染旧会话快照。
+- 取消成功后的 `cancelled`、Adapter 标准 `error` 和查询 Promise 拒绝不合并为同一种错误；页面分别给出已取消、检测异常和无法读取记录的反馈。
+- `progress: null` 的取消或错误终态保留最近一次可用进度；直接打开终态记录但没有历史快照时显示 0%，不虚构进度。
+- 本阶段不调用 `getExamResult()`，也不创建 ResultsPage 或 ReportPage。
+
+### Codex 辅助内容
+
+- 完整阅读 `PROJECT_PLAN.md`、`AGENTS.md`、架构、API Contract 和开发日志，复核现有 HomePage、应用级依赖、ExamService、MockDeviceAdapter 与测试。
+- Context7 MCP 在当前环境不可用，改用 React Router 官方文档核对 `useNavigate`、`useParams` 和动态路由用法。
+- 实现页面、路由、状态映射、取消/错误处理、响应式医疗科技风样式、测试和文档。
+- 使用本地浏览器实际点击验证首页连接、启动、动态路由、完整阶段完成和丢失 `examId` 错误页；检查桌面与 390px 窄屏布局，浏览器控制台无 warning/error。
+- 执行 lint、typecheck、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；4 个测试文件、35 个测试全部通过，其中 ExamPage 5 个测试、HomePage 6 个测试。
+- `npm run build`：通过；Vite 完成 84 个模块转换。
+- 浏览器实际流程：通过；首页连接 → 启动检测 → `/exam/:examId` → 完成，以及未知 `examId` 错误页均符合预期。
+- 响应式视觉检查：桌面与 390px 窄屏通过；浏览器控制台无错误或警告。
+- Vitest、Vite dev server 和生产构建在受限沙箱内会因子进程 `spawn EPERM` 无法启动；在获准的沙箱外环境重跑后均通过，该限制与代码或断言失败无关。
+
+### 未解决问题
+
+- ResultsPage 和 ReportPage 按本次范围未开发；检测完成后只显示终态。
+- 当前检测记录只存在于 Mock Device 内存中，浏览器完整刷新会丢失会话；页面已明确提示，但未增加持久化。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续阶段明确授权后，再实现 ResultsPage，并在 `completed` 后按页面生命周期调用 `ExamService.getExamResult(examId)`；报告页继续等待独立阶段。
+
+## 2026-08-28 — 首页接入共享 Mock Device / ExamService
+
+### 本次目标
+
+只把现有首页接入 `MockDeviceAdapter` 和已完成的 `ExamService`：展示未连接、连接中、连接成功、DeviceInfo、最后通信时间和可见错误，并在连接成功后启用“开始智能验光”；不创建检测页、结果页或报告页，不接入真实厂家 API，不执行 Git commit。
+
+### 完成内容
+
+- 新增应用级依赖装配模块，只创建一个 `MockDeviceAdapter`，并注入一个共享 `ExamService`。
+- 在 Router 外增加轻量 React Context Provider；当前和未来页面可取得同一个 ExamService，页面切换不会重建 Adapter。
+- 首页挂载时通过 `ExamService.getDeviceStatus()` 读取标准设备状态，不直接导入或调用具体 Adapter。
+- 点击“连接设备”后立即显示“正在连接”，再调用 `ExamService.connect()`；成功后展示 Adapter 返回的 `Smart Optometry Mock Device`、`MOCK-OPT-001`、已连接状态和格式化后的最后通信时间。
+- 只有设备标准状态为 `connected` 时启用“开始智能验光”；本阶段没有给按钮添加检测启动或页面跳转行为。
+- 连接失败或初始状态读取失败时显示可见 `role="alert"` 提示，连接失败后仍可重试。
+- 保留首页原有结构、文案层级、响应式布局、DEMO MODE 和“当前未接入真实设备”声明，只补充连接状态色、启用态和错误样式。
+- 更新 HomePage 测试，覆盖初始未连接、连接中、连接成功、DeviceInfo、通信时间更新、按钮启用、错误重试，以及页面卸载再进入后共享连接状态仍存在。
+- 同步 README、架构、设备接入、API Contract 和技术决策文档；未新增 ExamPage、ResultsPage 或报告页。
+
+### 我做出的决策
+
+- `MockDeviceAdapter` 在 `src/app/dependencies.ts` 的模块作用域创建，而不是在 React 组件、Provider render 或 ExamService 内创建。
+- Context 只向页面暴露共享 `ExamService`，不暴露具体 Adapter，继续维持 UI → ExamService → DeviceAdapter 的依赖方向。
+- 使用模块级单例加 Router 外层 Context 满足当前依赖生命周期，不引入 Redux。
+- 首页连接状态继续使用标准 `DeviceConnectionState`，不把设备连接状态混入单次检测的 `ExamStatus`。
+- 页面返回首页时若发现共享设备已经连接，通过 Mock Adapter 的幂等 `connect()` 重新取得 DeviceInfo，再刷新设备快照；不复制或解析 Adapter 内部的检测记录。
+
+### Codex 辅助内容
+
+- 完整阅读 `PROJECT_PLAN.md`、项目约束和现有 DeviceAdapter、MockDeviceAdapter、ExamService、首页与测试。
+- 实现应用级装配、Context 提供、首页状态消费、错误反馈、视觉状态和测试。
+- 复核单实例创建位置、页面切换生命周期、连接请求竞态和卸载后的异步响应失效。
+- 更新相关文档并执行代码检查、类型检查、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；3 个测试文件、28 个测试全部通过，其中 HomePage 4 个测试。
+- `npm run build`：通过；Vite 完成 83 个模块转换。
+- HomePage 回归测试：4 个测试全部通过。
+- Vitest 首次在受限沙箱内因 Vite 子进程 `spawn EPERM` 无法启动；获准在沙箱外重跑后通过。生产构建也在沙箱外执行并通过，该环境限制与代码或断言失败无关。
+
+### 未解决问题
+
+- “开始智能验光”现在会在 Mock Device 连接后启用，但本阶段按范围没有启动检测或导航。
+- 检测页、结果页和报告页仍未创建。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续阶段明确授权后，再让检测页从同一 Context 获取共享 ExamService、调用 `startExam()` 并保存 Adapter 返回的不透明 `examId`；不在页面创建新的 Adapter 或轮询器。
+
+## 2026-08-28 — ExamService 验光流程编排层
+
+### 本次目标
+
+只在 React 页面与 `DeviceAdapter` 之间实现 `ExamService`，负责连接业务入口、启动检测、状态轮询、主动取消、终态停止和订阅清理；不修改首页 UI，不创建检测、结果或报告页面，不接入真实设备、厂家 API 或数据库。
+
+### 完成内容
+
+- 新增构造注入 `DeviceAdapter` 的 `ExamService`，没有在服务内部创建或判断具体设备实现。
+- 提供 `connect()`、`disconnect()`、`getDeviceStatus()`、`startExam()`、`watchExam()`、`cancelExam()`、`getExamResult()` 和 `dispose()`。
+- `startExam()` 原样返回 Adapter 创建的 `ExamSession` 和不透明 `examId`。
+- `watchExam()` 立即查询一次状态，后续使用默认 500ms、可配置的递归 `setTimeout` 查询；只有上一次异步查询完成后才安排下一次，避免重入。
+- 对同一 `examId` 的多个观察者共享一个 watcher、一个 timer 和一个在途 Promise；重复注册同一观察者采用引用计数。
+- 只在阶段、进度或消息变化时发布状态；较晚订阅者可立即收到 watcher 缓存的最近标准状态。
+- 在 `completed`、`cancelled`、`error` 后清理 watcher；状态查询拒绝时调用必填 `onError` 并停止，不伪造 Adapter 状态。
+- 主动取消时暂停轮询并失效化旧响应，取消成功后从 Adapter 读取并发布真实 `cancelled` 快照；取消失败时恢复 watcher 并抛出原错误。
+- cleanup 和 `dispose()` 清理定时器并让在途旧响应失效，但不把仍在设备执行的检测解释为已取消。
+- `getExamResult(examId)` 只委托 Adapter，不缓存、生成或补齐任何验光数据。
+- 新增 10 个 ExamService 单元测试，并同步架构、设备接入、API Contract、技术决策和测试计划文档。
+
+### 我做出的决策
+
+- 继续复用领域层现有七个 `ExamStage`，不添加页面级 `idle`、`connecting` 或 `ready`，避免混淆设备、检测和未来 UI 状态。
+- 使用递归 `setTimeout` 而不是 `setInterval`，让轮询间隔从上一请求完成后开始计算，天然避免慢请求并发。
+- Adapter 返回的 `stage: error` 通过 `onStatus` 发布；`getExamStatus()` Promise 拒绝通过 `onError` 上报，两种错误语义不混合。
+- 终态不会自动读取结果；未来页面收到 `completed` 后按自身生命周期显式调用 `getExamResult(examId)`。
+- cleanup 只管理本地订阅生命周期，设备取消必须显式调用 `cancelExam(examId)`。
+- 本阶段不增加整体检测超时、自动重试或 RxJS；这些能力应在有明确需求后独立设计。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划、代理约束、架构、设备接入说明、API Contract 和既有开发日志。
+- 复核现有领域类型、`DeviceAdapter`、`MockDeviceAdapter`、测试配置和文档术语。
+- 实现 ExamService、测试和文档，并审查取消、cleanup、重复订阅、终态和在途 Promise 竞态。
+- 执行代码检查、类型检查、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；3 个测试文件、26 个测试全部通过，其中 ExamService 新增 10 个测试。
+- `npm run build`：通过；Vite 完成 76 个模块转换。
+- ExamService 定向测试：通过；1 个测试文件、10 个测试全部通过。
+- Vitest 和 Vite build 首次在受限沙箱内因子进程 `spawn EPERM` 无法启动；获准在沙箱外重跑后均通过，该限制与代码或断言失败无关。
+
+### 未解决问题
+
+- ExamService 尚未装配到首页或任何 React 页面；本次没有创建检测页、结果页或报告页。
+- 当前未实现整体检测超时和自动重试策略，后续应按明确页面需求单独设计。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+后续阶段可实现检测页，在装配位置向 ExamService 注入 `MockDeviceAdapter`，并在 React effect cleanup 中调用 `watchExam()` 返回的清理函数。页面不直接调用 Adapter，也不创建轮询 timer。结果页和报告页继续等待各自阶段授权。
+
 ## 2026-08-28 — MockDeviceAdapter 模拟设备实现
 
 ### 本次目标

@@ -12,7 +12,7 @@
 
 ## DEC-006：Phase 1 首页不模拟设备连接
 
-- **状态**：已接受
+- **状态**：已被 DEC-008 取代
 - **Context**：首页需要展示设备编号、连接状态、最后通信时间和操作入口，但 Mock Device 尚未进入实现范围。
 - **Decision**：首页使用明确的 Demo 编号 `OPT-DEMO-001`，连接状态显示“设备未接入”，最后通信显示“暂无通信”；开始检测按钮保持不可用。
 - **Reason**：在保留完整首页信息层级的同时，避免虚构设备连接或检测能力。
@@ -56,4 +56,12 @@
 - **Context**：当前 Demo 只建模一台设备，且检测需要经历多个阶段；如果允许重复启动或把轮询隐藏在 Adapter/UI 中，会造成状态冲突、无法停止的定时器和伪结果风险。
 - **Decision**：一台设备同时只允许一个活动检测；重复启动返回 `DEVICE_BUSY`。`getExamStatus()` 只返回一次快照，持续轮询由 Exam Service 负责。只有 `completed` 检测可读取结果，取消只作用于进行中检测。
 - **Reason**：让设备状态、单次检测状态和流程编排各自保持单一职责，并让 Mock 与未来 Real Adapter 遵守同一套可测试规则。
-- **Consequence**：具体 Adapter 需要跟踪唯一活动检测并抛出统一业务错误；React 页面不直接轮询，Exam Service 实现前这些规则只存在于 contract 和文档中。
+- **Consequence**：具体 Adapter 需要跟踪唯一活动检测并抛出统一业务错误；当前 ExamService 已落实轮询所有权、终态停止、主动取消和订阅清理，React 页面不直接轮询。
+
+## DEC-008：应用级单例装配通过 React Context 提供
+
+- **状态**：已接受
+- **Context**：首页需要使用 Mock 连接状态，未来页面还需要访问同一设备内存中的活动检测和 `examId`；如果页面各自创建 Adapter，路由切换会丢失这些状态。
+- **Decision**：只在 `src/app/dependencies.ts` 创建一次 `MockDeviceAdapter` 并注入一次 `ExamService`；由 Router 外层的 `AppDependenciesProvider` 通过 React Context 提供共享 ExamService。页面不导入或创建具体 Adapter。
+- **Reason**：模块级单例加根部 Context 已能清晰满足当前轻量依赖共享和测试注入需求，无需引入 Redux 或服务定位器。
+- **Consequence**：页面切换不会重建 Adapter，Mock 内存状态和 `examId` 得以保留；测试可以向 Provider 注入隔离的 ExamService。未来替换真实 Adapter 只修改装配模块，但应用级依赖生命周期需要继续由根部统一管理。
