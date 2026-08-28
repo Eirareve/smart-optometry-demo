@@ -110,10 +110,39 @@ describe('ExamPage', () => {
       '100',
     )
     expect(screen.getByTestId('analysis-status')).toHaveTextContent('已完成')
-    expect(screen.getByText(/暂不展示检测结果或报告/)).toBeInTheDocument()
+    expect(screen.getByText(/可以查看标准化验光结果/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '查看验光结果' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '返回首页' }),
     ).toBeInTheDocument()
+  })
+
+  it('navigates from a completed exam to its ResultPage', async () => {
+    const { examService, session } = await createConnectedExam()
+    const getExamResult = vi.spyOn(examService, 'getExamResult')
+
+    renderExam(examService, session.examId)
+    await advanceExamTime(0)
+    await advanceExamTime(POLL_INTERVAL_MS * 4)
+
+    expect(
+      screen.getByRole('heading', { name: '检测完成' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看验光结果' }))
+    await advanceExamTime(0)
+
+    expect(
+      screen.getByRole('heading', { name: '智能验光结果' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '本次模拟检测已完成' }),
+    ).toBeInTheDocument()
+    expect(getExamResult).toHaveBeenCalledWith(session.examId)
+    expect(screen.getByText('-2.50 D')).toBeInTheDocument()
+    expect(screen.getByText('-2.75 D')).toBeInTheDocument()
   })
 
   it('cancels through ExamService and allows returning home', async () => {

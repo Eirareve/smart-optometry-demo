@@ -13,7 +13,7 @@
 
 - 正常状态按 `preparing → left_eye → right_eye → analyzing → completed` 实时呈现。
 - 每个阶段同步更新百分比、左眼、右眼和数据分析状态，并始终显示 `examId` 与 DEMO MODE。
-- `completed` 显示“检测完成”和返回首页入口，不进入结果页或报告页。
+- `completed` 显示“检测完成”、“查看验光结果”主按钮和返回首页入口；点击后携带同一 `examId` 进入 `/results/:examId`。
 - 点击“取消检测”只调用 ExamService；收到真实 `cancelled` 快照后显示“检测已取消”并允许返回首页。
 - Adapter 返回 `error` 终态时停留在检测页，显示异常说明和返回首页入口。
 - 直接打开 Mock 内存中不存在的 `examId` 时显示清晰错误，不白屏。
@@ -34,9 +34,24 @@
 - `getExamResult(examId)` 原样委托 `DeviceAdapter`，ExamService 不生成、补齐或缓存验光数据。
 - 非正数或非有限轮询间隔应在构造时拒绝。
 
+## 验光结果页
+
+- `/results/:examId` 挂载后只调用 `ExamService.getExamResult(examId)`，不直接访问 `MockDeviceAdapter`。
+- 加载 Promise 未完成时显示明确 loading 状态，不提前渲染结果。
+- completed 结果正确显示 OD / OS 的 SPH、CYL、AXIS；正数带 `+`、负数保留 `-`、零显示 `0.00 D`，AXIS 使用合理数字格式并带 `°`。
+- Mock 标准结果显示 OD `-2.50 D / -0.75 D / 175°` 与 OS `-2.75 D / -0.50 D / 10°`。
+- 17 项扩展指标全部直接来自 `ExamResult.metrics`，显示中性名称、值和“待定义”，页面不创建固定 17 项。
+- `source: mock` 显示 `Mock Device`、`DEMO MODE` 和“模拟数据”。
+- 页面显示 `examId`、开始时间、完成时间及完整非医疗用途声明。
+- 页面不显示或依赖 `rawData`；测试使用不可见 sentinel 验证原始结构不会渲染。
+- 未知 `examId` / 刷新后内存记录丢失显示“无法读取本次检测结果”，不白屏。
+- 未完成检测返回 `EXAM_NOT_COMPLETED` 时显示“检测尚未完成”，不生成假结果。
+- 提供“重新检测”和“返回首页”；报告按钮仅为 disabled 的下一阶段占位，不存在报告路由。
+- 浏览器完整流程覆盖首页连接、启动检测、completed、结果页导航、17 项显示和刷新丢失记录错误。
+
 ## 后续阶段
 
-整体超时策略、异常数据、重复检测、结果为空、结果页与报告页等场景，在对应功能实现后补充。
+整体超时策略、异常数据、重复检测、结果为空和报告页等场景，在对应功能实现后补充。
 
 ## DeviceAdapter 抽象层
 
