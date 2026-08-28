@@ -8,11 +8,10 @@ Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的�
 
 ## 当前状态
 
-Phase 1 首页、统一 `DeviceAdapter` 抽象契约和 `MockDeviceAdapter` 已完成。
-首页包含 DEMO MODE、设备状态、设备编号、连接状态、最后通信时间和“开始智能验光”入口。
+Phase 1 首页、统一 `DeviceAdapter` 抽象契约、`MockDeviceAdapter` 和 `ExamService` 已完成。
+首页已通过共享 ExamService 接入 Mock Device，包含 DEMO MODE、设备连接过程、DeviceInfo、最后通信时间、可见错误和“开始智能验光”入口。
 
-当前 Mock Device 已完成底层适配器实现，但尚未接入 UI；
-Exam Service、检测流程、结果页和报告页尚未实现，真实设备尚未接入。
+当前只完成首页连接状态消费；检测页、结果页和报告页尚未实现，真实设备尚未接入。
 
 ## 本地运行
 

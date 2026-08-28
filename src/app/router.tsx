@@ -1,6 +1,8 @@
 import { BrowserRouter, Route, Routes } from 'react-router'
 
 import { HomePage } from '../pages/HomePage'
+import { AppDependenciesProvider } from './AppDependenciesProvider'
+import type { AppDependencies } from './dependencies'
 
 export function AppRoutes() {
   return (
@@ -10,10 +12,16 @@ export function AppRoutes() {
   )
 }
 
-export function AppRouter() {
+interface AppRouterProps {
+  readonly dependencies?: AppDependencies
+}
+
+export function AppRouter({ dependencies }: AppRouterProps) {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <AppDependenciesProvider dependencies={dependencies}>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AppDependenciesProvider>
   )
 }

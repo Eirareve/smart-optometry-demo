@@ -1,13 +1,52 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { useAppDependencies } from '../app/dependencies'
 import { DeviceStatusCard } from '../components/DeviceStatusCard'
+import type {
+  DeviceConnectionState,
+  DeviceInfo,
+  DeviceStatus,
+} from '../domain'
 
-const demoDevice = {
-  deviceId: 'OPT-DEMO-001',
-  deviceName: '智能验光设备',
-  connectionStatus: '设备未接入',
-  lastCommunication: '暂无通信',
-} as const
+const CONNECTION_STATUS_LABELS: Readonly<
+  Record<DeviceConnectionState, string>
+> = {
+  disconnected: '设备未连接',
+  connecting: '正在连接',
+  connected: '已连接',
+  disconnecting: '正在断开',
+  error: '连接异常',
+}
+
+function formatLastCommunication(isoTimestamp: string | null): string {
+  if (isoTimestamp === null) {
+    return '暂无通信'
+  }
+
+  const communicationTime = new Date(isoTimestamp)
+
+  if (Number.isNaN(communicationTime.getTime())) {
+    return isoTimestamp
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(communicationTime)
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message
+  }
+
+  return '发生未知错误，请重试。'
+}
 
 function BrandMark() {
   return (
@@ -20,11 +59,116 @@ function BrandMark() {
 }
 
 export function HomePage() {
+  const { examService } = useAppDependencies()
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
+  const [connectionState, setConnectionState] =
+    useState<DeviceConnectionState>('disconnected')
+  const [lastCommunicationAt, setLastCommunicationAt] = useState<
+    string | null
+  >(null)
   const [connectionNotice, setConnectionNotice] = useState('')
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const requestVersionRef = useRef(0)
 
-  const handleConnect = () => {
-    setConnectionNotice('当前阶段尚未接入设备，连接功能暂不可用。')
+  useEffect(() => {
+    let isActive = true
+    const requestVersion = ++requestVersionRef.current
+
+    const loadDeviceState = async () => {
+      try {
+        let status = await examService.getDeviceStatus()
+        let info: DeviceInfo | null = null
+
+        if (status.connectionState === 'connected') {
+          info = await examService.connect()
+          status = await examService.getDeviceStatus()
+        }
+
+        if (!isActive || requestVersionRef.current !== requestVersion) {
+          return
+        }
+
+        setDeviceInfo(info)
+        setConnectionState(status.connectionState)
+        setLastCommunicationAt(status.lastCommunicationAt)
+        setConnectionNotice(status.message ?? '')
+        setConnectionError(null)
+      } catch (error) {
+        if (!isActive || requestVersionRef.current !== requestVersion) {
+          return
+        }
+
+        setConnectionState('error')
+        setConnectionError(
+          `读取模拟设备状态失败：${getErrorMessage(error)}`,
+        )
+      }
+    }
+
+    void loadDeviceState()
+
+    return () => {
+      isActive = false
+      requestVersionRef.current += 1
+    }
+  }, [examService])
+
+  const handleConnect = async () => {
+    if (
+      connectionState === 'connecting' ||
+      connectionState === 'connected'
+    ) {
+      return
+    }
+
+    const requestVersion = ++requestVersionRef.current
+
+    setConnectionState('connecting')
+    setConnectionNotice('正在连接 Mock Device（模拟设备）…')
+    setConnectionError(null)
+
+    try {
+      const info = await examService.connect()
+      const status = await examService.getDeviceStatus()
+
+      if (requestVersionRef.current !== requestVersion) {
+        return
+      }
+
+      setDeviceInfo(info)
+      setConnectionState(status.connectionState)
+      setLastCommunicationAt(status.lastCommunicationAt)
+      setConnectionNotice(status.message ?? 'Mock/Demo 设备已连接。')
+    } catch (error) {
+      if (requestVersionRef.current !== requestVersion) {
+        return
+      }
+
+      let latestStatus: DeviceStatus | null = null
+
+      try {
+        latestStatus = await examService.getDeviceStatus()
+      } catch {
+        // 连接错误仍由下方可见提示呈现；状态读取失败时使用 error 回退状态。
+      }
+
+      if (requestVersionRef.current !== requestVersion) {
+        return
+      }
+
+      setConnectionState(latestStatus?.connectionState ?? 'error')
+      setLastCommunicationAt(latestStatus?.lastCommunicationAt ?? null)
+      setConnectionNotice(latestStatus?.message ?? '')
+      setConnectionError(`模拟设备连接失败：${getErrorMessage(error)}`)
+    }
   }
+
+  const isDeviceConnected = connectionState === 'connected'
+  const examAvailabilityMessage = isDeviceConnected
+    ? '模拟设备已就绪，可开始检测'
+    : connectionState === 'connecting'
+      ? '正在建立模拟连接，请稍候'
+      : '设备连接后可开始检测'
 
   return (
     <div className="home-shell">
@@ -63,7 +207,7 @@ export function HomePage() {
             <button
               className="primary-button"
               type="button"
-              disabled
+              disabled={!isDeviceConnected}
               aria-describedby="exam-disabled-reason"
             >
               <span>开始智能验光</span>
@@ -71,13 +215,18 @@ export function HomePage() {
                 →
               </span>
             </button>
-            <p id="exam-disabled-reason">设备连接后可开始检测</p>
+            <p id="exam-disabled-reason">{examAvailabilityMessage}</p>
           </div>
         </section>
 
         <DeviceStatusCard
-          {...demoDevice}
+          deviceId={deviceInfo?.id ?? '连接后读取'}
+          deviceName={deviceInfo?.name ?? 'Mock Device（模拟设备）'}
+          connectionState={connectionState}
+          connectionStatus={CONNECTION_STATUS_LABELS[connectionState]}
+          lastCommunication={formatLastCommunication(lastCommunicationAt)}
           connectionNotice={connectionNotice}
+          connectionError={connectionError}
           onConnect={handleConnect}
         />
       </main>

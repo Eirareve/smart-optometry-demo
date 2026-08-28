@@ -1,5 +1,61 @@
 # 开发日志
 
+## 2026-08-28 — 首页接入共享 Mock Device / ExamService
+
+### 本次目标
+
+只把现有首页接入 `MockDeviceAdapter` 和已完成的 `ExamService`：展示未连接、连接中、连接成功、DeviceInfo、最后通信时间和可见错误，并在连接成功后启用“开始智能验光”；不创建检测页、结果页或报告页，不接入真实厂家 API，不执行 Git commit。
+
+### 完成内容
+
+- 新增应用级依赖装配模块，只创建一个 `MockDeviceAdapter`，并注入一个共享 `ExamService`。
+- 在 Router 外增加轻量 React Context Provider；当前和未来页面可取得同一个 ExamService，页面切换不会重建 Adapter。
+- 首页挂载时通过 `ExamService.getDeviceStatus()` 读取标准设备状态，不直接导入或调用具体 Adapter。
+- 点击“连接设备”后立即显示“正在连接”，再调用 `ExamService.connect()`；成功后展示 Adapter 返回的 `Smart Optometry Mock Device`、`MOCK-OPT-001`、已连接状态和格式化后的最后通信时间。
+- 只有设备标准状态为 `connected` 时启用“开始智能验光”；本阶段没有给按钮添加检测启动或页面跳转行为。
+- 连接失败或初始状态读取失败时显示可见 `role="alert"` 提示，连接失败后仍可重试。
+- 保留首页原有结构、文案层级、响应式布局、DEMO MODE 和“当前未接入真实设备”声明，只补充连接状态色、启用态和错误样式。
+- 更新 HomePage 测试，覆盖初始未连接、连接中、连接成功、DeviceInfo、通信时间更新、按钮启用、错误重试，以及页面卸载再进入后共享连接状态仍存在。
+- 同步 README、架构、设备接入、API Contract 和技术决策文档；未新增 ExamPage、ResultsPage 或报告页。
+
+### 我做出的决策
+
+- `MockDeviceAdapter` 在 `src/app/dependencies.ts` 的模块作用域创建，而不是在 React 组件、Provider render 或 ExamService 内创建。
+- Context 只向页面暴露共享 `ExamService`，不暴露具体 Adapter，继续维持 UI → ExamService → DeviceAdapter 的依赖方向。
+- 使用模块级单例加 Router 外层 Context 满足当前依赖生命周期，不引入 Redux。
+- 首页连接状态继续使用标准 `DeviceConnectionState`，不把设备连接状态混入单次检测的 `ExamStatus`。
+- 页面返回首页时若发现共享设备已经连接，通过 Mock Adapter 的幂等 `connect()` 重新取得 DeviceInfo，再刷新设备快照；不复制或解析 Adapter 内部的检测记录。
+
+### Codex 辅助内容
+
+- 完整阅读 `PROJECT_PLAN.md`、项目约束和现有 DeviceAdapter、MockDeviceAdapter、ExamService、首页与测试。
+- 实现应用级装配、Context 提供、首页状态消费、错误反馈、视觉状态和测试。
+- 复核单实例创建位置、页面切换生命周期、连接请求竞态和卸载后的异步响应失效。
+- 更新相关文档并执行代码检查、类型检查、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；3 个测试文件、28 个测试全部通过，其中 HomePage 4 个测试。
+- `npm run build`：通过；Vite 完成 83 个模块转换。
+- HomePage 回归测试：4 个测试全部通过。
+- Vitest 首次在受限沙箱内因 Vite 子进程 `spawn EPERM` 无法启动；获准在沙箱外重跑后通过。生产构建也在沙箱外执行并通过，该环境限制与代码或断言失败无关。
+
+### 未解决问题
+
+- “开始智能验光”现在会在 Mock Device 连接后启用，但本阶段按范围没有启动检测或导航。
+- 检测页、结果页和报告页仍未创建。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续阶段明确授权后，再让检测页从同一 Context 获取共享 ExamService、调用 `startExam()` 并保存 Adapter 返回的不透明 `examId`；不在页面创建新的 Adapter 或轮询器。
+
 ## 2026-08-28 — ExamService 验光流程编排层
 
 ### 本次目标

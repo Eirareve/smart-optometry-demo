@@ -1,10 +1,22 @@
+import type { DeviceConnectionState } from '../domain'
+
 type DeviceStatusCardProps = {
   deviceId: string
   deviceName: string
+  connectionState: DeviceConnectionState
   connectionStatus: string
   lastCommunication: string
   connectionNotice: string
+  connectionError: string | null
   onConnect: () => void
+}
+
+const STATUS_CHIP_LABELS: Readonly<Record<DeviceConnectionState, string>> = {
+  disconnected: '未连接',
+  connecting: '连接中',
+  connected: '已连接',
+  disconnecting: '断开中',
+  error: '连接异常',
 }
 
 function DeviceIcon() {
@@ -25,11 +37,16 @@ function DeviceIcon() {
 export function DeviceStatusCard({
   deviceId,
   deviceName,
+  connectionState,
   connectionStatus,
   lastCommunication,
   connectionNotice,
+  connectionError,
   onConnect,
 }: DeviceStatusCardProps) {
+  const isConnectDisabled =
+    connectionState === 'connecting' || connectionState === 'connected'
+
   return (
     <section className="device-card" aria-labelledby="device-card-title">
       <div className="device-card__header">
@@ -37,9 +54,9 @@ export function DeviceStatusCard({
           <p className="section-kicker">DEVICE OVERVIEW</p>
           <h2 id="device-card-title">设备状态</h2>
         </div>
-        <span className="status-chip">
+        <span className={`status-chip status-chip--${connectionState}`}>
           <span className="status-chip__dot" aria-hidden="true" />
-          未接入
+          {STATUS_CHIP_LABELS[connectionState]}
         </span>
       </div>
 
@@ -64,14 +81,29 @@ export function DeviceStatusCard({
         </div>
       </dl>
 
-      <button className="secondary-button" type="button" onClick={onConnect}>
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={onConnect}
+        disabled={isConnectDisabled}
+        aria-busy={connectionState === 'connecting'}
+      >
         <span className="button-plug" aria-hidden="true" />
-        连接设备
+        {connectionState === 'connecting'
+          ? '正在连接'
+          : connectionState === 'connected'
+            ? '模拟设备已连接'
+            : '连接设备'}
       </button>
 
       <p className="connection-notice" role="status" aria-live="polite">
         {connectionNotice}
       </p>
+      {connectionError === null ? null : (
+        <p className="connection-error" role="alert">
+          {connectionError}
+        </p>
+      )}
     </section>
   )
 }

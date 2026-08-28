@@ -4,7 +4,7 @@
 
 本文记录网页 Demo 内部的 TypeScript 流程服务与设备契约。`ExamService` 位于 React UI 和 `DeviceAdapter` 之间；`DeviceAdapter` 用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对上层提供的能力。本文**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
 
-当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；ExamService 尚未接入 UI。真实设备通讯、HTTP API、本地设备桥接服务、检测页、结果页和报告页均未实现。
+当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页已通过应用级共享依赖接入 `ExamService` 的连接和设备状态入口。真实设备通讯、HTTP API、本地设备桥接服务、检测页、结果页和报告页均未实现。
 
 ## 代码位置
 
@@ -21,6 +21,8 @@ src/services/device/index.ts
 src/services/exam/ExamService.ts
 src/services/exam/ExamService.test.ts
 src/services/exam/index.ts
+src/app/dependencies.ts
+src/app/AppDependenciesProvider.tsx
 ```
 
 ## DeviceAdapter 接口
