@@ -1,5 +1,55 @@
 # 开发日志
 
+## 2026-08-29 — Vercel 部署准备
+
+### 本次目标
+
+只完成 React + TypeScript + Vite 单页应用的 Vercel 部署准备：增加 BrowserRouter deep-link rewrite、核对生产构建与本地预览、补充部署说明；不修改业务 UI、设备逻辑或项目依赖，不执行 Git commit。
+
+### 完成内容
+
+- 在项目根目录新增最小化 `vercel.json`，只配置 `/(.*)` 到 `/index.html` 的 SPA rewrite，并声明 Vercel 配置 schema。
+- 未加入旧式 `builds`、`routes` 或其他不必要的部署覆盖配置。
+- 核对 `package.json`：现有 `build` 与 `preview` 脚本满足本次验证，Vercel 可按 Vite 项目默认行为安装依赖、执行构建并发布静态输出；未增加 Vercel CLI 或其他依赖。
+- README 新增 Deployment 部分，记录 Vercel 托管目标、`main` 对应 Production、Pull Requests 对应 Preview，以及 SPA rewrite 用途；当前没有填写或虚构正式 URL。
+- 核对现有 BrowserRouter 路由：`/`、`/exam/:examId`、`/results/:examId`、`/report/:examId`；当前项目没有 `/developer/device`。
+
+### 我做出的决策
+
+- 采用 Vercel 官方 Vite SPA 文档给出的单条 rewrite，不覆盖框架检测、安装命令、构建命令或输出目录。
+- rewrite 保持浏览器地址不变，仅由 Vercel 返回 `/index.html`，再交给 React Router 按当前 URL 匹配页面。
+- 不安装 `vercel` 包；Git 集成部署和 Vercel 的 Vite 自动检测不要求把 CLI 加入应用依赖。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划和仓库约束，核对路由、Vite 配置、npm scripts、依赖树与当前工作区状态。
+- 查阅 Vercel 官方 Vite、rewrite、build 与 deployment environment 文档，确认当前最小配置。
+- 创建部署配置、更新 README 和本开发日志，并执行本地构建、预览和完整项目验证。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `vercel.json` JSON 解析：通过。
+- `npm run build`（预览前）：通过；Vite 完成 92 个模块转换并生成 `dist`。
+- `npm run preview`：通过；本地服务器在 `127.0.0.1:4173` 启动成功，`/`、`/exam/EX-DEMO-PREVIEW`、`/results/EX-DEMO-PREVIEW`、`/report/EX-DEMO-PREVIEW` 均返回 HTTP 200 和 SPA 根文档，验证后已停止服务器。
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；7 个测试文件、64 个测试全部通过。
+- `npm run build`（最终）：通过；Vite 完成 92 个模块转换。
+- Vite build、preview 和 Vitest 首次在受限 Windows 沙箱内因子进程 `spawn EPERM` 无法加载配置；获准在沙箱外重跑后均通过，该环境限制与代码或断言失败无关。
+
+### 未解决问题
+
+- 当前尚未创建或连接正式 Vercel 项目，因此没有正式 Production URL，也未进行线上域名与 Vercel 构建日志验证。
+- Mock Device 检测记录仍只存在于浏览器内存；直接打开或刷新带 `examId` 的页面时，SPA 路由可以加载，但既有内存检测记录仍可能不存在。这是现有 Demo 数据生命周期，不属于本次部署配置范围。
+
+### 下一步
+
+将仓库导入 Vercel 并确认 Framework Preset 为 Vite；让 `main` 触发 Production 部署、Pull Request 触发 Preview 部署后，分别直接访问并刷新 `/exam/:examId`、`/results/:examId` 和 `/report/:examId`，核对 rewrite 与页面自身的内存记录提示。
+
 ## 2026-08-29 — Mobile Responsive Optimization
 
 ### 本次目标

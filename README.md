@@ -29,6 +29,15 @@ npm run lint
 npm test
 ```
 
+## Deployment
+
+- Hosted on Vercel
+- `main` = Production
+- Pull Requests = Preview
+- SPA rewrite configuration：根目录的 `vercel.json` 将所有应用路径重写到 `/index.html`，以支持 React Router `BrowserRouter` 的 deep linking 和直接刷新。
+
+当前尚无正式 Vercel URL。
+
 ## Roadmap
 
 ### v0.1 — 网页 Demo
