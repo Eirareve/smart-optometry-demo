@@ -6,7 +6,7 @@
 
 ## 当前阶段
 
-当前阶段为 **V0.1 网页 Demo**。React 基础工程、首页、`DeviceAdapter` 抽象契约、Mock Device、ExamService、模拟验光进行页和验光结果页已经实现；报告页尚未实现，也没有接入真实设备。
+当前阶段为 **V0.1 网页 Demo**。React 基础工程、首页、`DeviceAdapter` 抽象契约、Mock Device、ExamService、模拟验光进行页、验光结果页和电子验光报告页已经实现；报告只提供浏览器原生打印，不生成服务端 PDF，也没有接入真实设备。
 
 V0.1 的目标闭环为：
 

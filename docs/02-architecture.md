@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService` 验光流程编排层、`/exam/:examId` 模拟验光进行页和 `/results/:examId` 验光结果页；报告页尚未实现，真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService` 验光流程编排层、`/exam/:examId` 模拟验光进行页、`/results/:examId` 验光结果页和 `/report/:examId` 电子验光报告页；真实设备未接入。
 
 ## V0.1 分层
 
@@ -10,7 +10,7 @@
 浏览器中的网页 UI
   │  只表达用户意图和渲染状态
   ▼
-ExamService（当前已接入首页、检测页与结果页）
+ExamService（当前已接入首页、检测页、结果页与报告页）
   │  负责流程、状态机、取消、异常与结果组织
   ▼
 DeviceAdapter
@@ -28,7 +28,9 @@ MockDeviceAdapter（当前已实现）
 
 `ExamPage` 从同一 Context 获取共享 `ExamService`，通过路由参数取得 `examId`，再调用 `watchExam()` 订阅状态。页面只渲染当前阶段、进度、左眼、右眼、分析、取消和错误状态，不导入 `MockDeviceAdapter`，也不创建 `setInterval` 或其他轮询 timer。组件卸载时执行 `watchExam()` 返回的 cleanup；`completed` 显示“查看验光结果”主按钮并把同一不透明 `examId` 编码进 `/results/:examId`，`cancelled` 和错误状态允许返回首页。直接访问已经不在 Mock 内存中的 `examId` 时，查询拒绝会呈现明确错误页。
 
-`ResultPage` 同样只从 Context 获取 `ExamService`。页面根据路由参数调用 `ExamService.getExamResult(examId)`，加载成功后只渲染标准 `ExamResult` 的 `examId`、`rightEye`、`leftEye`、`metrics`、`startedAt`、`completedAt` 和 `source`。左右眼格式化与指标卡片分别由 `EyeResultCard` 和 `MetricGrid` 承担；17 项不在页面创建，而是直接遍历 `ExamResult.metrics`。页面不读取 `rawData`，也不导入具体 Adapter。`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和其他读取失败分别显示清晰错误，不返回假结果。报告页和可选开发调试页不在本阶段实现范围。
+`ResultPage` 同样只从 Context 获取 `ExamService`。页面根据路由参数调用 `ExamService.getExamResult(examId)`，加载成功后只渲染标准 `ExamResult` 的 `examId`、`rightEye`、`leftEye`、`metrics`、`startedAt`、`completedAt` 和 `source`。左右眼格式化与指标卡片分别由 `EyeResultCard` 和 `MetricGrid` 承担；扩展指标不在页面创建，而是直接遍历 `ExamResult.metrics`。页面不读取 `rawData`，也不导入具体 Adapter。`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和其他读取失败分别显示清晰错误，不返回假结果。完成结果页的“查看验光报告”把同一不透明 `examId` 导航到 `/report/:examId`。
+
+`ReportPage` 继续从 Context 获取同一个 `ExamService`，并按自己的页面生命周期再次调用 `ExamService.getExamResult(examId)`。报告只使用 `ExamResult` 的标准字段，不实例化 `MockDeviceAdapter`，不读取 `rawData`，也不重新创建验光数据；`ReportEyeTable` 和 `ReportMetricTable` 分别呈现核心屈光结果与实际提供的 `metrics`。`EXAM_NOT_FOUND` 显示模拟内存记录已不存在，`EXAM_NOT_COMPLETED` 阻止报告生成并提供返回检测页入口。打印按钮只调用 `window.print()`；`@media print` 隐藏操作按钮、动画、环境光和网页装饰，切换白底深色文字并为 A4 表格分页提供可读样式。报告中的 DEMO、模拟数据与非医疗用途声明在打印时保留。
 
 ### Exam Service
 
@@ -41,7 +43,7 @@ MockDeviceAdapter（当前已实现）
 - 在 `completed`、`cancelled`、`error` 或状态查询拒绝后停止轮询。
 - 通过单次订阅 cleanup 或服务级 `dispose()` 清理定时器和失效化在途查询。
 
-结果读取只委托 `DeviceAdapter.getExamResult(examId)`；ExamService 不生成、补齐或缓存验光数据。当前首页、检测页和结果页均通过 Context 使用同一个服务实例；页面只向 ExamService 发出意图并消费标准状态或结果，不直接操作 Adapter、定时器或原始数据。
+结果读取只委托 `DeviceAdapter.getExamResult(examId)`；ExamService 不生成、补齐或缓存验光数据。当前首页、检测页、结果页和报告页均通过 Context 使用同一个服务实例；页面只向 ExamService 发出意图并消费标准状态或结果，不直接操作 Adapter、定时器或原始数据。
 
 ### DeviceAdapter
 

@@ -1,5 +1,64 @@
 # 开发日志
 
+## 2026-08-28 — 电子验光报告与浏览器打印
+
+### 本次目标
+
+只实现 `/report/:examId`、ReportPage 和浏览器原生打印：从 ResultPage 进入报告页，通过共享 `ExamService.getExamResult(examId)` 获取标准 `ExamResult`，展示基础信息、OD/OS 核心屈光结果、动态扩展指标、模拟数据声明、加载与错误状态，并提供适合 A4 的 `@media print` 样式；不实现服务端 PDF、jsPDF、html2canvas、AI 分析、医疗诊断、疾病风险、数据库、用户系统、真实患者信息或厂家 API，不执行 Git commit。
+
+### 完成内容
+
+- 新增 `/report/:examId` 路由和 `ReportPage`；页面从应用级 Context 获取共享 ExamService，并按自己的生命周期调用 `ExamService.getExamResult(examId)`。
+- ResultPage 原 disabled 的“生成报告（下一阶段）”已改为可点击的“查看验光报告”，携带同一不透明 `examId` 导航到报告页。
+- 报告展示“智能验光报告”、DEMO MODE、“模拟数据”、Demo 展示用报告编号、`examId`、检测开始/完成时间和数据来源；展示编号只以 `DEMO-RPT-` 拼接 `examId`，并明确不是数据库或真实医疗报告编号。
+- 新增 `ReportEyeTable`，以报告表格展示 OD / OS 的 SPH、CYL、AXIS；新增 `ReportMetricTable`，只遍历 `ExamResult.metrics` 的实际内容，不创建固定 17 项。
+- `unknown` 扩展指标只显示“待定义”；没有添加正常、异常、健康、风险、疾病解释或眼部健康评分。
+- 报告的检测摘要只陈述已采集左右眼核心屈光数据与扩展检测指标；完整声明明确模拟数据不构成医疗诊断、验光处方、疾病筛查或治疗建议。
+- “打印报告”只调用 `window.print()`；同时提供“返回验光结果”和“返回首页”。项目没有新增 PDF 或截图依赖。
+- 新增专门 `@media print`：设置 A4 与 12mm 页边距，隐藏操作按钮、动画、ambient glow 和网页装饰，移除阴影与透明背景，切换白底深色文字，保留 DEMO / 模拟数据标识和声明，并为指标表格设置可重复表头、自动换行及避免单行被拆分。
+- `EXAM_NOT_FOUND` 显示“无法生成本次验光报告”和“当前模拟检测记录已不存在，请返回首页重新检测。”；`EXAM_NOT_COMPLETED` 显示“本次检测尚未完成，无法生成报告。”并提供返回检测页面与首页。
+- 提取 `formatDiopter()`、`formatAxis()`、`formatExamTime()`、数据来源和扩展指标格式化到 `src/utils/examFormatters.ts`，ResultPage、EyeResultCard、MetricGrid 与报告组件共用同一套逻辑。
+- 新增 ReportPage 9 个测试、formatter 4 个测试，并为 ResultPage 增加报告导航测试；`rawData` 测试使用访问即抛错的 getter，确认 ReportPage 不读取其内容。
+- 同步 README、产品范围、架构、设备接入、API Contract 与测试计划。
+
+### 我做出的决策
+
+- 现有 DeviceAdapter 与 ExamService contract 已满足报告页，因此不修改领域模型、Adapter、Mock 数据或流程服务。
+- ResultPage 和 ReportPage 都根据各自页面生命周期调用 `getExamResult(examId)`；报告页不复用组件内存中的结果对象，也不从 Mock 内部状态生成报告。
+- 只提取页面间确实重复的轻量 formatter；报告采用语义化表格组件以兼顾屏幕科技风和打印可读性，没有引入复杂报告抽象或 PDF 排版库。
+- 报告编号明确标记为 Demo 展示编号，只拼接不透明 `examId`，不解析其格式，不创建数据库 ID。
+- 页面只使用标准字段 `examId`、`source`、`rightEye`、`leftEye`、`metrics`、`startedAt`、`completedAt`；`rawData` 继续由 Adapter 保留但不属于报告 UI 数据源。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划、代理约束、产品范围、架构、设备接入说明、API Contract、既有开发日志和测试计划。
+- 复核当前分支、干净工作区、路由、ResultPage、结果组件、共享依赖、ExamService 和测试结构。
+- 实现报告页面、报告专用表格、共享 formatter、浏览器打印入口、打印样式、错误与加载状态、自动化测试和文档更新。
+- 执行 lint、typecheck、完整测试和生产构建，并检查 diff whitespace、禁用范围、`rawData`/Mock 依赖与固定指标生成。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；7 个测试文件、56 个测试全部通过，其中 ReportPage 9 个测试、共享 formatter 4 个测试、ResultPage 新增 1 个报告导航测试。
+- `npm run build`：通过；Vite 完成 91 个模块转换。
+- 定向测试：通过；ReportPage、ResultPage 和 formatter 共 3 个测试文件、20 个测试全部通过。
+- Vitest 与 Vite build 在受限 Windows 沙箱内因子进程 `spawn EPERM` 无法启动；在获准的沙箱外环境重跑后均通过，该限制与代码或断言失败无关。
+
+### 未解决问题
+
+- Mock Device 检测记录仍只存在于内存中，浏览器完整刷新后可能丢失；报告页已明确提示并提供返回首页入口，没有增加持久化或数据库。
+- 浏览器打印效果最终仍受用户浏览器、纸张、页边距和“背景图形”打印选项影响；当前只提供标准 CSS 打印版式，不生成独立 PDF 文件。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待项目负责人验收本阶段；未获后续任务授权前，不增加服务端 PDF、AI 医疗分析、持久化、用户系统或真实设备接入。
+
 ## 2026-08-28 — 验光结果页面
 
 ### 本次目标
