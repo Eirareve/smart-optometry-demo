@@ -65,3 +65,11 @@
 - **Decision**：只在 `src/app/dependencies.ts` 创建一次 `MockDeviceAdapter` 并注入一次 `ExamService`；由 Router 外层的 `AppDependenciesProvider` 通过 React Context 提供共享 ExamService。页面不导入或创建具体 Adapter。
 - **Reason**：模块级单例加根部 Context 已能清晰满足当前轻量依赖共享和测试注入需求，无需引入 Redux 或服务定位器。
 - **Consequence**：页面切换不会重建 Adapter，Mock 内存状态和 `examId` 得以保留；测试可以向 Provider 注入隔离的 ExamService。未来替换真实 Adapter 只修改装配模块，但应用级依赖生命周期需要继续由根部统一管理。
+
+## DEC-009：Mock 故障控制不进入 DeviceAdapter contract
+
+- **状态**：已接受
+- **Context**：Demo resilience 需要确定性模拟连接失败、启动失败、检测终态错误和状态查询失败，并读取 Mock 内存诊断事件；这些能力只为演示、测试和未来 Developer 工具服务，不是正式设备的共同业务能力。
+- **Decision**：保持 `DeviceAdapter` 的 7 个厂家无关方法不变，另行定义 `MockDeviceControl` 与 `MockDeviceDiagnostics`。`MockDeviceAdapter` 可以同时实现三个接口，但 `ExamService` 和业务页面仍只依赖 `DeviceAdapter`；未来 `RealDeviceAdapter` 不要求实现 Mock 专用接口。
+- **Reason**：如果把 `setScenario()`、`reset()` 或诊断日志读取加入正式契约，会迫使真实适配器暴露无意义或危险的 Demo 操作，并让 UI、测试控制和厂家通信职责混在同一边界。
+- **Consequence**：故障控制与诊断只能从明确的 Mock / Developer 装配边界访问；当前不创建 Developer 页面。Mock 事件是有界纯内存数据，不是厂家原始日志。未来若需要真实设备诊断，应基于正式资料单独设计，不能复用 Mock 接口假装厂家能力。

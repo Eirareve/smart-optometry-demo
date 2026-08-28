@@ -1,5 +1,114 @@
 # 开发日志
 
+## 2026-08-29 — Mobile Responsive Optimization
+
+### 本次目标
+
+只优化现有浅蓝主题在手机浏览器中的完整 Demo 操作体验，覆盖 320、360、375、390、414、430 和 768px，同时保持桌面与打印布局正常；不引入大型依赖、不增加视觉测试框架、不修改设备/业务架构、不执行 Git commit。
+
+### 完成内容
+
+- 保留桌面左右布局，在 `850px` 以下把 Home、Exam 和 Result 核心内容切换为单栏；在 `560px` 以下完成手机紧凑布局，在 `375px` 以上为 Result metrics 使用紧凑两列，320/360px 保持单列。
+- Home 手机端按 Brand、Hero、Primary CTA、Device Status Card、Footer 顺序自然纵向排列；Hero 标题限制为 32–42px，主 CTA 占满可用宽度。
+- Exam 手机端按标题/阶段、扫描视觉、进度、步骤、操作按钮显示；扫描视觉受卡片内宽约束，进度和步骤先于检测编号，所有检测操作按钮满足至少 44px 高。
+- Result 手机端 OD 在前、OS 在后；SPH/CYL/AXIS 改为清晰的横向 label/value 行，metrics 在 320/360px 单列、375–430px 两列、768px 两列。
+- Report 手机端将 OD/OS 表格替换为两张纵向结果卡，将 metrics 表格替换为 stacked rows；桌面继续显示表格，`@media print` 明确恢复打印表格并隐藏移动卡片。
+- 所有主要操作按钮设置 `min-height: 44px` 和合理间距；长 `examId`、报告编号、指标 code/value 使用 `overflow-wrap: anywhere`。
+- 移除根节点 `320px` 最小宽度，约束 shell 为 viewport 宽度并裁切装饰性环境光；页面内部不产生横向滚动。
+- 现有 viewport meta 更新为 `width=device-width, initial-scale=1, viewport-fit=cover`，为页面左右边距、顶部栏与底部操作区域加入 iPhone safe-area inset。
+- 当前仓库没有 Developer Diagnostics 页面，因此本阶段没有新增该页面。
+
+### 我做出的决策
+
+- 使用 `850px`、`560px` 和 `375px` 三个轻量断点，不引入响应式依赖；850px 负责桌面到单栏，560px 负责手机布局，375px 负责 metrics 单列/两列平衡。
+- 手机报告采用 stacked cards/rows，而不是保留 42rem 宽的长距离横向滚动；桌面和打印继续使用语义表格。
+- safe area 只增加页面边距与底部留白，不创建固定底栏，避免遮挡内容或改变现有交互结构。
+
+### Codex 辅助内容
+
+- 核对所有产品页面、共用结果/报告组件、viewport 和现有打印 CSS，在不覆盖当前浅蓝主题及其他未提交改动的前提下增量修改。
+- 使用真实浏览器 viewport 逐一检查 320、360、375、390、414、430、768px 的 Home、Exam、Result、Report 页面宽度、布局、按钮高度、长编号换行和横向溢出。
+- 完整走通手机端连接设备、开始检测、查看结果、查看报告流程，并复核 1440px Home、Exam、Report 桌面网格未退化。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：通过；7 个测试文件、64 个测试全部通过。
+- `npm run build`：通过；Vite 完成 92 个模块转换。
+- 浏览器 viewport 检查：320、360、375、390、414、430、768px 均无页面级横向滚动；主要按钮实测约 47–67px 高。
+- Vitest、Vite build 和本地预览在受限 Windows 沙箱内首次因子进程 `spawn EPERM` 无法启动；在沙箱外重跑后通过，该问题与代码或断言失败无关。
+
+### 未解决问题
+
+- 本阶段按要求未引入 Playwright 或截图比对测试；响应式验收使用真实浏览器 viewport 手工检查。
+- 厂家接口、真实设备接入和 17 项正式字段定义仍为 `TBD`。
+
+### 下一步
+
+可在 Vercel 预览环境使用真实 iPhone/Android 浏览器复核系统字体、浏览器地址栏收缩和打印机驱动差异；若发现具体机型问题，再做小范围兼容修正。
+
+## 2026-08-28 — Mock Device 故障场景控制与诊断基础能力
+
+### 本次目标
+
+只为 `MockDeviceAdapter` 增加与正式 `DeviceAdapter` 分离的确定性故障控制和有界内存诊断事件，覆盖 `normal`、连接失败、启动失败、检测终态错误和状态查询失败；不创建 Developer 页面，不修改现有业务页面视觉，不接入真实厂家 API，不增加数据库，不改变普通页面对 `rawData` 的边界，不执行 Git commit。
+
+### 完成内容
+
+- 新增独立 `MockDeviceControl`，提供 `getScenario()`、`setScenario()` 和 `reset()`；`DeviceAdapter` 仍保持原有 7 个厂家无关方法。
+- 支持 `normal`、`connect_failure`、`start_exam_failure`、`exam_error` 和额外的 `status_query_failure`，全部为显式选择、可重复测试的确定性行为，不使用随机故障。
+- `connect_failure` 以 `DEVICE_CONNECTION_FAILED` 拒绝并保持非连接状态；`start_exam_failure` 以 `EXAM_START_FAILED` 拒绝且不创建会话；`exam_error` 正常创建 `examId`，在准备和左眼阶段后进入标准 `error` 终态；`status_query_failure` 以 `DEVICE_COMMUNICATION_ERROR` 拒绝状态查询并触发 ExamService `onError`。
+- 新增独立 `MockDeviceDiagnostics` 和 `MockDiagnosticEvent`，记录连接请求/成功/失败、检测启动请求/成功/失败、阶段变化、取消、检测失败、状态查询失败、断开和重置。
+- 每条诊断事件包含 ISO 8601 `timestamp`、`type`、安全 `message`，检测事件按需携带 `examId` 和 `stage`；读取返回副本，支持显式清理。
+- 诊断事件只保存在 Mock 实例内存中，默认最多保留最近 100 条，超过上限时删除最早事件；测试可注入更小的正整数上限。
+- `reset()` 恢复 `normal`，并把连接失败留下的 `error` / 未完成连接尝试恢复为干净的 `disconnected`；历史终态不被改写，诊断事件也不会被隐式清空。
+- 新增我方 Demo/Adapter 层安全错误码 `DEVICE_CONNECTION_FAILED`、`EXAM_START_FAILED`、`DEVICE_COMMUNICATION_ERROR`，文档明确其不是厂家真实错误码。
+- 扩展 MockDeviceAdapter 与 ExamService 测试，覆盖全部场景、恢复、事件关联、事件容量上限和真实 observer `onError` 路径；原有测试保持通过。
+- 同步架构、设备接入、API Contract、技术决策和测试计划文档；Developer 页面、业务页面和 `rawData` 定位均未修改。
+
+### 我做出的决策
+
+- `MockDeviceAdapter` 可以同时实现 `DeviceAdapter`、`MockDeviceControl` 与 `MockDeviceDiagnostics`，但应用装配继续以 `DeviceAdapter` 注入 ExamService，业务页面无法访问 Mock 专用接口。
+- `exam_error` 与标准检测终态保持一致，状态查询成功返回 `stage: error`；`status_query_failure` 是查询 Promise 拒绝，两者不混为同一种错误。
+- 诊断日志使用简单有界数组，不引入 logging framework、第三方依赖、持久化或患者数据。
+- 场景重置与日志清理分开：`reset()` 用于恢复正常行为，`clearDiagnosticEvents()` 用于明确清空诊断证据。
+- `ExamResult.rawData` 结构和用途不变；HomePage、ExamPage、ResultPage 与 ReportPage 继续不读取它。
+
+### Codex 辅助内容
+
+- 完整阅读项目规划、代理约束、架构、设备接入说明、API Contract、既有开发日志和测试计划，并复核当前分支与干净工作区。
+- 实现 Mock-only 控制/诊断类型、确定性故障行为、错误模型、事件容量限制、统一导出、自动化测试和相关文档。
+- 复核正式契约未增加 Demo 方法、React 页面未依赖 Mock 控制、诊断事件不含患者信息、故障不生成假结果且 `rawData` 边界未变化。
+- 执行 lint、typecheck、定向测试、完整测试和生产构建。
+
+### 我人工检查/修改的内容
+
+尚未记录，等待项目负责人检查。
+
+### 测试结果
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- 定向测试：通过；2 个测试文件、32 个测试全部通过。
+- `npm test`：通过；7 个测试文件、64 个测试全部通过。
+- `npm run build`：通过；Vite 完成 92 个模块转换。
+- Vitest 与 Vite build 在受限 Windows 沙箱内首次因子进程 `spawn EPERM` 无法启动；获准在沙箱外重跑后均通过，该环境限制与代码或断言失败无关。
+
+### 未解决问题
+
+- 本阶段按要求没有创建 Developer 页面，因此故障控制与诊断能力当前只可由代码和测试访问。
+- 日志为纯内存并随 Mock 实例生命周期消失，不做数据库、文件或远程持久化。
+- 真实硬件、厂家 API、SDK、DLL、协议、厂家错误码、真实通信日志和 17 项正式字段映射仍为 `TBD`。
+
+### 下一步
+
+等待后续明确授权后，可让 Developer / Debug 页面从专用装配边界取得 `MockDeviceControl` 与 `MockDeviceDiagnostics`；普通业务页面与 ExamService 继续只依赖正式 `DeviceAdapter` 流程。
+
 ## 2026-08-28 — 电子验光报告与浏览器打印
 
 ### 本次目标

@@ -291,4 +291,180 @@ describe('MockDeviceAdapter', () => {
       exam: { examId },
     })
   })
+
+  it('rejects connect_failure without becoming connected', async () => {
+    const adapter = createAdapter()
+    adapter.setScenario('connect_failure')
+
+    await expect(adapter.connect()).rejects.toMatchObject({
+      name: 'DeviceAdapterError',
+      code: 'DEVICE_CONNECTION_FAILED',
+      message: expect.stringMatching(/Mock\/Demo/),
+    })
+    await expect(adapter.getStatus()).resolves.toMatchObject({
+      connectionState: 'error',
+      operatingState: 'unknown',
+    })
+
+    expect(adapter.getDiagnosticEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'DEVICE_CONNECT_FAILED',
+          message: expect.stringMatching(/Mock\/Demo/),
+        }),
+      ]),
+    )
+  })
+
+  it('rejects start_exam_failure without creating a session and can recover', async () => {
+    const adapter = await createConnectedAdapter()
+    adapter.setScenario('start_exam_failure')
+
+    await expect(adapter.startExam()).rejects.toMatchObject({
+      name: 'DeviceAdapterError',
+      code: 'EXAM_START_FAILED',
+    })
+    const statusAfterFailure = await adapter.getStatus()
+    expect(statusAfterFailure).toMatchObject({
+      connectionState: 'connected',
+      operatingState: 'idle',
+    })
+    expect(statusAfterFailure).not.toHaveProperty('activeExamId')
+    expect(
+      adapter
+        .getDiagnosticEvents()
+        .filter(({ type }) => type === 'EXAM_STARTED'),
+    ).toHaveLength(0)
+
+    adapter.setScenario('normal')
+    await expect(adapter.startExam()).resolves.toMatchObject({
+      examId: expect.stringMatching(/^MOCK-EXAM-/),
+    })
+  })
+
+  it('enters error in exam_error and never returns a result', async () => {
+    const adapter = await createConnectedAdapter()
+    adapter.setScenario('exam_error')
+    const { examId } = await adapter.startExam()
+
+    await expect(adapter.getExamStatus(examId)).resolves.toMatchObject({
+      stage: 'preparing',
+    })
+
+    vi.advanceTimersByTime(
+      FAST_MOCK_DEVICE_TIMING.preparingMs +
+        FAST_MOCK_DEVICE_TIMING.leftEyeMs,
+    )
+
+    await expect(adapter.getExamStatus(examId)).resolves.toMatchObject({
+      stage: 'error',
+      progress: null,
+      message: expect.stringMatching(/Mock\/Demo/),
+    })
+    await expect(adapter.getExamResult(examId)).rejects.toMatchObject({
+      code: 'EXAM_NOT_COMPLETED',
+    })
+    await expect(adapter.getStatus()).resolves.toMatchObject({
+      operatingState: 'idle',
+    })
+
+    expect(adapter.getDiagnosticEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'EXAM_FAILED',
+          examId,
+          stage: 'error',
+        }),
+      ]),
+    )
+  })
+
+  it('rejects status_query_failure without converting it to ExamStatus.error', async () => {
+    const adapter = await createConnectedAdapter()
+    const { examId } = await adapter.startExam()
+    adapter.setScenario('status_query_failure')
+
+    await expect(adapter.getExamStatus(examId)).rejects.toMatchObject({
+      name: 'DeviceAdapterError',
+      code: 'DEVICE_COMMUNICATION_ERROR',
+    })
+
+    expect(adapter.getDiagnosticEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'EXAM_STATUS_QUERY_FAILED',
+          examId,
+        }),
+      ]),
+    )
+  })
+
+  it('reset restores normal and clears the connection failure state', async () => {
+    const adapter = createAdapter()
+    adapter.setScenario('connect_failure')
+    await expect(adapter.connect()).rejects.toMatchObject({
+      code: 'DEVICE_CONNECTION_FAILED',
+    })
+
+    adapter.reset()
+
+    expect(adapter.getScenario()).toBe('normal')
+    await expect(adapter.getStatus()).resolves.toMatchObject({
+      connectionState: 'disconnected',
+    })
+    await expect(adapter.connect()).resolves.toMatchObject({
+      id: 'MOCK-OPT-001',
+    })
+  })
+
+  it('records connected and exam events with timestamps and examId correlation', async () => {
+    const adapter = await createConnectedAdapter()
+    const { examId } = await adapter.startExam()
+
+    const events = adapter.getDiagnosticEvents()
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          timestamp: expect.any(String),
+          type: 'DEVICE_CONNECTED',
+          message: expect.any(String),
+        }),
+        expect.objectContaining({
+          timestamp: expect.any(String),
+          type: 'EXAM_STARTED',
+          message: expect.any(String),
+          examId,
+        }),
+        expect.objectContaining({
+          type: 'EXAM_STAGE_CHANGED',
+          examId,
+          stage: 'preparing',
+        }),
+      ]),
+    )
+    expect(events.every(({ timestamp }) => !Number.isNaN(Date.parse(timestamp)))).toBe(
+      true,
+    )
+  })
+
+  it('keeps only the configured number of most recent diagnostic events', async () => {
+    const adapter = new MockDeviceAdapter({
+      timing: FAST_MOCK_DEVICE_TIMING,
+      diagnosticEventLimit: 5,
+    })
+
+    await adapter.connect()
+    await adapter.disconnect()
+    await adapter.connect()
+    await adapter.disconnect()
+
+    const events = adapter.getDiagnosticEvents()
+
+    expect(events).toHaveLength(5)
+    expect(events.at(-1)).toMatchObject({ type: 'DEVICE_DISCONNECTED' })
+
+    adapter.clearDiagnosticEvents()
+    expect(adapter.getDiagnosticEvents()).toEqual([])
+  })
 })

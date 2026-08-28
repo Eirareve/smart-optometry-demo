@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 当前产品阶段：网页 Demo。
-- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter` 和注入式 `ExamService`；首页、检测页、结果页与报告页已通过应用级共享依赖接入两者。
+- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter`、与正式契约分离的 Mock 故障控制/诊断接口和注入式 `ExamService`；首页、检测页、结果页与报告页已通过应用级共享依赖接入正式流程。
 - 真实设备：未接入。
 - 厂家接口资料：尚未取得。
 - 17 项正式字段定义：尚未取得。
@@ -14,7 +14,7 @@
 
 我方内部统一接口位于 `src/services/device/DeviceAdapter.ts`，业务错误位于 `src/services/device/DeviceAdapterError.ts`，领域类型位于 `src/domain/`。当前契约覆盖连接、断开、设备状态、启动检测、取消检测、检测状态和结果读取。详细方法、单检测并发规则、轮询责任与错误码见 `docs/04-api-contract.md`。
 
-该契约是当前 Mock 与未来 Real Adapter 共同遵循的我方标准，不是厂家 API。`MockDeviceAdapter` 已实现该契约，`ExamService` 只依赖该接口并负责轮询、取消和清理；首页只调用 `ExamService.connect()` 和 `getDeviceStatus()`，不直接访问具体 Adapter。
+该契约是当前 Mock 与未来 Real Adapter 共同遵循的我方标准，不是厂家 API。`MockDeviceAdapter` 已实现该契约，`ExamService` 只依赖该接口并负责轮询、取消和清理；首页只调用 `ExamService.connect()` 和 `getDeviceStatus()`，不直接访问具体 Adapter。`simulateFailure()`、`setScenario()`、`forceDisconnect()`、`resetDemo()`、`getDiagnosticLog()` 等 Demo 方法没有进入 `DeviceAdapter`。
 
 ## V0.1 Mock Device 实现
 
@@ -69,6 +69,54 @@ preparing (10%)
   → completed (100%)
 ```
 
+### Mock 故障控制
+
+Mock 专用控制接口位于 `src/services/device/MockDeviceControl.ts`：
+
+```ts
+type MockDeviceScenario =
+  | 'normal'
+  | 'connect_failure'
+  | 'start_exam_failure'
+  | 'exam_error'
+  | 'status_query_failure'
+
+interface MockDeviceControl {
+  getScenario(): MockDeviceScenario
+  setScenario(scenario: MockDeviceScenario): void
+  reset(): void
+}
+```
+
+`MockDeviceAdapter` 同时实现 `DeviceAdapter` 与 `MockDeviceControl`，但 `MockDeviceControl` 不属于厂家无关的正式契约，未来 `RealDeviceAdapter` 无需实现。当前业务装配仍只以 `DeviceAdapter` 类型把 Mock 注入 `ExamService`，React 页面没有获得 Mock 控制引用；本阶段未创建 Developer 页面。
+
+场景均为确定性行为，不使用随机故障：
+
+| 场景 | 行为 |
+|---|---|
+| `normal` | 保持原连接、检测推进、取消和结果行为 |
+| `connect_failure` | 未连接设备执行 `connect()` 时以 `DEVICE_CONNECTION_FAILED` 拒绝，连接状态进入 `error`，不会误报 `connected` |
+| `start_exam_failure` | 已连接且空闲时执行 `startExam()` 以 `EXAM_START_FAILED` 拒绝，不创建 `ExamSession` 或 `examId`，设备保持 `connected + idle` |
+| `exam_error` | `startExam()` 正常创建 `examId`；准备和左眼阶段后，在进入右眼采集阶段时转为标准 `ExamStatus.stage = error`，释放设备且结果读取继续以 `EXAM_NOT_COMPLETED` 拒绝 |
+| `status_query_failure` | `getExamStatus(examId)` 以 `DEVICE_COMMUNICATION_ERROR` 拒绝，用于触发 `ExamService` observer 的 `onError`；不会伪造 `ExamStatus.error` |
+
+`reset()` 将场景恢复为 `normal`；如果连接故障留下 `error` 或存在未完成的连接尝试，还会使其恢复为干净的 `disconnected` 状态并失效化旧连接请求。已完成、已取消或已进入 `error` 的历史检测不会被改写为成功结果。诊断事件由独立的 `clearDiagnosticEvents()` 清理，避免重置场景时丢失故障证据。
+
+新增的 `DEVICE_CONNECTION_FAILED`、`EXAM_START_FAILED` 和 `DEVICE_COMMUNICATION_ERROR` 是我方 Demo / Adapter 层安全错误码，不是厂家真实错误码，也不暗示任何厂家协议或 SDK 行为。
+
+### Mock 诊断事件
+
+`src/services/device/MockDeviceDiagnostics.ts` 定义独立的 `MockDeviceDiagnostics`：
+
+```ts
+interface MockDeviceDiagnostics {
+  getDiagnosticEvents(): readonly MockDiagnosticEvent[]
+  clearDiagnosticEvents(): void
+}
+```
+
+每条事件至少包含 ISO 8601 `timestamp`、`type` 和安全 `message`；检测相关事件可增加 `examId` 与标准 `stage`。当前覆盖连接请求/成功/失败、检测启动请求/成功/失败、阶段变化、取消、检测失败、状态查询失败、设备断开和控制重置。事件只保存在 `MockDeviceAdapter` 实例的内存数组中，读取时返回副本；默认上限为最近 100 条，超过上限时从最早事件开始删除。该日志只用于 Demo / developer diagnostics，不属于 `DeviceAdapter`，不代表厂家原始通信日志，不写入 `rawData`，也不包含患者信息。
+
 ### 内存状态与并发
 
 - `Map<examId, MockExamRecord>` 保存检测会话、毫秒时间戳及可选终止状态。
@@ -77,7 +125,7 @@ preparing (10%)
 - 检测过程中断开 Mock 连接时，该会话结束为 `error`；这只是当前 Mock 的安全终止行为，不代表厂家设备规范。
 - 所有标准时间字段对外转换为 ISO 8601 字符串。
 
-Mock 遵守“一台设备只有一个活动检测”的契约，并覆盖 `DEVICE_NOT_CONNECTED`、`DEVICE_BUSY`、`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和 `EXAM_ALREADY_FINISHED`。这些是我方业务错误码，不是厂家错误码。
+Mock 遵守“一台设备只有一个活动检测”的契约，并覆盖 `DEVICE_NOT_CONNECTED`、`DEVICE_BUSY`、`DEVICE_CONNECTION_FAILED`、`EXAM_START_FAILED`、`DEVICE_COMMUNICATION_ERROR`、`EXAM_NOT_FOUND`、`EXAM_NOT_COMPLETED` 和 `EXAM_ALREADY_FINISHED`。这些是我方业务或 Demo/Adapter 层错误码，不是厂家错误码。
 
 ### 模拟结果
 

@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService` 验光流程编排层、`/exam/:examId` 模拟验光进行页、`/results/:examId` 验光结果页和 `/report/:examId` 电子验光报告页；真实设备未接入。
+本文描述 V0.1 网页 Demo 的目标架构。当前已完成 React 基础工程、首页 UI、`DeviceAdapter` 抽象契约、带独立故障控制与内存诊断能力的 `MockDeviceAdapter`、`ExamService` 验光流程编排层、`/exam/:examId` 模拟验光进行页、`/results/:examId` 验光结果页和 `/report/:examId` 电子验光报告页；真实设备未接入，Developer 页面尚未创建。
 
 ## V0.1 分层
 
@@ -59,7 +59,7 @@ MockDeviceAdapter（当前已实现）
 
 接口只描述上层需要的能力，不描述或暗示任何厂家 API、SDK、DLL、协议和错误码。具体方法语义与数据结构见 `docs/04-api-contract.md`。
 
-`src/services/device/DeviceAdapterError.ts` 另外定义我方统一业务错误码。它用于区分未连接、设备忙、检测不存在、检测未完成和检测已结束，不对应任何厂家私有错误码。
+`src/services/device/DeviceAdapterError.ts` 另外定义我方统一业务错误码。除未连接、设备忙、检测不存在、检测未完成和检测已结束外，当前也包含 Demo/Adapter 层用于连接失败、启动失败和通信失败的安全错误码。它们均不对应任何厂家私有错误码。
 
 ### Domain 类型
 
@@ -77,6 +77,16 @@ src/domain/index.ts   → 领域类型统一导出
 ### MockDeviceAdapter
 
 `src/services/device/MockDeviceAdapter.ts` 已实现同一个 `DeviceAdapter`，用于提供明确标记的模拟连接状态、按时间推导的检测阶段、取消和完成结果；其行为不代表真实厂家设备规范。实现用内存 Map 保存检测记录，并用单一 `activeExamId` 保证一台 Mock Device 同时只有一个活动检测。普通 Demo 和测试时间均由同一文件中的配置集中管理。
+
+Mock 专用能力通过两个旁路接口提供，而不是加入正式设备契约：
+
+```text
+MockDeviceAdapter ── implements DeviceAdapter
+                  ├─ implements MockDeviceControl
+                  └─ implements MockDeviceDiagnostics
+```
+
+`MockDeviceControl` 只管理 `normal`、`connect_failure`、`start_exam_failure`、`exam_error` 和 `status_query_failure` 五种确定性场景，并提供恢复 `normal` 的 `reset()`。`MockDeviceDiagnostics` 只返回 Mock 内部的连接、启动、阶段、取消和失败事件快照；事件保存在进程内存，默认只保留最近 100 条，不是厂家通信原始日志，也不记录患者信息。当前 React 业务页面与 ExamService 均不依赖这两个接口；未来只有明确的 Developer / Debug 装配边界可以持有它们。
 
 Mock 已在 `src/app/dependencies.ts` 创建一次并注入共享 `ExamService`。根部 `AppDependenciesProvider` 在路由外提供该服务，因此页面切换只会挂载或卸载页面组件，不会重建内存 Adapter，Adapter 中的连接状态和 `examId` 记录仍保留。页面不导入具体 Adapter；未来 Real Adapter 也只在该装配边界替换，而不是改写页面或 ExamService。
 
