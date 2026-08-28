@@ -1,21 +1,11 @@
 import type { ExtendedMetric } from '../domain'
+import {
+  formatMetricStatus,
+  formatMetricValue,
+} from '../utils/examFormatters'
 
 interface MetricGridProps {
   readonly metrics: readonly ExtendedMetric[]
-}
-
-function formatMetricValue(metric: ExtendedMetric): string {
-  const value = String(metric.value)
-
-  return metric.unit === undefined || metric.unit.trim() === ''
-    ? value
-    : `${value} ${metric.unit}`
-}
-
-function getMetricStatusLabel(metric: ExtendedMetric): string {
-  return metric.status === undefined || metric.status === 'unknown'
-    ? '待定义'
-    : '状态待确认'
 }
 
 export function MetricGrid({ metrics }: MetricGridProps) {
@@ -40,7 +30,7 @@ export function MetricGrid({ metrics }: MetricGridProps) {
             <div className="metric-card__value-row">
               <strong>{formatMetricValue(metric)}</strong>
               <span className="metric-card__status">
-                {getMetricStatusLabel(metric)}
+                {formatMetricStatus(metric)}
               </span>
             </div>
           </li>

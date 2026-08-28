@@ -8,10 +8,10 @@ Smart Optometry Demo（智能验光 Demo）是一个面向智能验光设备的�
 
 ## 当前状态
 
-Phase 1 首页、统一 `DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService`、模拟验光进行页和验光结果页已完成。
+Phase 1 首页、统一 `DeviceAdapter` 抽象契约、`MockDeviceAdapter`、`ExamService`、模拟验光进行页、验光结果页和电子验光报告页已完成。
 首页通过共享 ExamService 接入 Mock Device；设备连接后，“开始智能验光”会创建检测会话并导航到 `/exam/:examId`。
 
-检测页实时呈现 `preparing → left_eye → right_eye → analyzing → completed`、进度、左右眼状态、分析状态、取消和内存会话丢失错误。检测完成后可进入 `/results/:examId`，通过 ExamService 读取标准 `ExamResult`，展示 OD/OS 的 SPH、CYL、AXIS、17 项中性扩展指标、时间与 Mock 数据来源。报告页尚未实现，真实设备尚未接入。
+检测页实时呈现 `preparing → left_eye → right_eye → analyzing → completed`、进度、左右眼状态、分析状态、取消和内存会话丢失错误。检测完成后可进入 `/results/:examId`，再进入 `/report/:examId`；两个页面都通过共享 ExamService 读取标准 `ExamResult`，展示 OD/OS 的 SPH、CYL、AXIS、动态扩展指标、时间与 Mock 数据来源。报告页使用浏览器原生打印功能，可由用户在打印对话框中打印或保存为 PDF；项目未引入 PDF 生成依赖，真实设备仍未接入。
 
 ## 本地运行
 

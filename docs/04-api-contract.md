@@ -4,7 +4,7 @@
 
 本文记录网页 Demo 内部的 TypeScript 流程服务与设备契约。`ExamService` 位于 React UI 和 `DeviceAdapter` 之间；`DeviceAdapter` 用于统一当前 `MockDeviceAdapter` 和未来 `RealDeviceAdapter` 对上层提供的能力。本文**不是厂家设备接口文档**，不代表任何厂家已经支持这些方法。
 
-当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页、`/exam/:examId` 检测页与 `/results/:examId` 结果页均通过应用级共享依赖使用同一 ExamService。真实设备通讯、HTTP API、本地设备桥接服务和报告页均未实现。
+当前已完成领域类型、`DeviceAdapter`、`MockDeviceAdapter` 内存实现和注入式 `ExamService`；首页、`/exam/:examId` 检测页、`/results/:examId` 结果页与 `/report/:examId` 报告页均通过应用级共享依赖使用同一 ExamService。真实设备通讯、HTTP API、本地设备桥接服务和服务端 PDF 均未实现。
 
 ## 代码位置
 
@@ -27,11 +27,17 @@ src/app/router.tsx
 src/pages/HomePage.tsx
 src/pages/ExamPage.tsx
 src/pages/ResultPage.tsx
+src/pages/ReportPage.tsx
 src/components/EyeResultCard.tsx
 src/components/MetricGrid.tsx
+src/components/ReportEyeTable.tsx
+src/components/ReportMetricTable.tsx
+src/utils/examFormatters.ts
 src/app/HomePage.test.tsx
 src/app/ExamPage.test.tsx
 src/app/ResultPage.test.tsx
+src/app/ReportPage.test.tsx
+src/utils/examFormatters.test.ts
 ```
 
 ## DeviceAdapter 接口
@@ -90,7 +96,7 @@ export class ExamService {
 | `startExam()` | 委托 `DeviceAdapter.startExam()`，原样返回含不透明 `examId` 的 `ExamSession` |
 | `getExamResult(examId)` | 只委托 `DeviceAdapter.getExamResult(examId)`，不缓存、补齐或生成结果 |
 
-ExamService 不在 `completed` 时自动获取结果。ExamPage 收到完成状态后只提供 `/results/:examId` 导航；ResultPage 再按自身页面生命周期显式调用 `getExamResult(examId)`。结果是否可读仍遵守 Adapter 的 `completed` 前置条件。
+ExamService 不在 `completed` 时自动获取结果。ExamPage 收到完成状态后只提供 `/results/:examId` 导航；ResultPage 与随后进入的 ReportPage 均按各自页面生命周期显式调用 `getExamResult(examId)`。结果是否可读仍遵守 Adapter 的 `completed` 前置条件，报告页不会因结果页曾经加载过数据而跳过服务读取。
 
 ### watchExam 与轮询
 
@@ -389,6 +395,11 @@ V0.1 Mock 实现未来生成的未知 17 项必须遵守：
 - ResultPage 通过 `ExamService.getExamResult(examId)` 获取标准 `ExamResult`，加载期间显示明确状态。
 - ResultPage 只使用 `examId`、`rightEye`、`leftEye`、`metrics`、`startedAt`、`completedAt` 和 `source`；17 项直接遍历 `metrics`，不在页面创建。
 - ResultPage 对 `EXAM_NOT_FOUND` 与 `EXAM_NOT_COMPLETED` 分别显示“记录不存在”与“检测尚未完成”，不回退到假结果。
+- ResultPage 的“查看验光报告”只把同一不透明 `examId` 导航到 `/report/:examId`。
+- ReportPage 通过 `ExamService.getExamResult(examId)` 重新获取标准 `ExamResult`，只使用 `examId`、`source`、`rightEye`、`leftEye`、`metrics`、`startedAt` 和 `completedAt`。
+- ReportPage 动态遍历实际提供的 `metrics`，不补齐 17 项；`unknown` 只显示“待定义”，不生成医学解释、健康状态或风险判断。
+- ReportPage 对不存在和未完成检测分别显示明确错误；只有成功获得 completed 结果时才提供打印入口。
+- 报告打印只调用浏览器原生 `window.print()`，不属于 ExamService 或 DeviceAdapter contract，不引入服务端 PDF、jsPDF、html2canvas 或其他数据接口。
 - `completed`、`cancelled`、Adapter `error` 终态和状态查询拒绝分别呈现；内存中不存在的 `examId` 显示可返回首页的错误状态。
 
 UI 不直接实例化或调用具体 Adapter，也不解析厂家原始字段或读取 `rawData`。

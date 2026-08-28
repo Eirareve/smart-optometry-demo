@@ -6,6 +6,10 @@ import { EyeResultCard } from '../components/EyeResultCard'
 import { MetricGrid } from '../components/MetricGrid'
 import type { ExamResult } from '../domain'
 import { DeviceAdapterError } from '../services/device'
+import {
+  formatExamSource,
+  formatExamTime,
+} from '../utils/examFormatters'
 
 interface ResultEntry {
   readonly examId: string
@@ -53,28 +57,6 @@ function describeResultError(examId: string, error: unknown): ResultFailure {
     message: `读取标准验光结果时发生错误${detail}。请返回首页重新检测。`,
     kind: 'unknown',
   }
-}
-
-function formatResultTime(isoTimestamp: string): string {
-  const date = new Date(isoTimestamp)
-
-  if (Number.isNaN(date.getTime())) {
-    return isoTimestamp
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-function getSourceLabel(source: ExamResult['source']): string {
-  return source === 'mock' ? 'Mock Device' : '标准设备数据'
 }
 
 export function ResultPage() {
@@ -211,15 +193,15 @@ export function ResultPage() {
                 </div>
                 <div>
                   <dt>检测开始时间</dt>
-                  <dd>{formatResultTime(currentResult.startedAt)}</dd>
+                  <dd>{formatExamTime(currentResult.startedAt)}</dd>
                 </div>
                 <div>
                   <dt>检测完成时间</dt>
-                  <dd>{formatResultTime(currentResult.completedAt)}</dd>
+                  <dd>{formatExamTime(currentResult.completedAt)}</dd>
                 </div>
                 <div>
                   <dt>数据来源</dt>
-                  <dd>{getSourceLabel(currentResult.source)}</dd>
+                  <dd>{formatExamSource(currentResult.source)}</dd>
                 </div>
               </dl>
             </section>
@@ -262,11 +244,15 @@ export function ResultPage() {
                 返回首页
               </button>
               <button
-                className="result-disabled-button"
+                className="result-secondary-button"
                 type="button"
-                disabled
+                onClick={() =>
+                  navigate(
+                    `/report/${encodeURIComponent(currentResult.examId)}`,
+                  )
+                }
               >
-                生成报告（下一阶段）
+                查看验光报告
               </button>
             </div>
           </>

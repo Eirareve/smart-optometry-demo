@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -201,5 +201,25 @@ describe('ResultPage', () => {
       screen.getByRole('button', { name: '返回检测页面' }),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('eye-result-od')).not.toBeInTheDocument()
+  })
+
+  it('navigates from ResultPage to the report for the same examId', async () => {
+    const examService = createExamService()
+    const result = createExamResult()
+    const getExamResult = vi
+      .spyOn(examService, 'getExamResult')
+      .mockResolvedValue(result)
+
+    renderResult(examService)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '查看验光报告' }),
+    )
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: '智能验光报告' }),
+    ).toBeInTheDocument()
+    expect(getExamResult).toHaveBeenLastCalledWith(EXAM_ID)
+    expect(getExamResult).toHaveBeenCalledTimes(2)
   })
 })

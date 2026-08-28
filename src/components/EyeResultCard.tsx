@@ -1,34 +1,10 @@
 import type { EyeRefraction } from '../domain'
+import { formatAxis, formatDiopter } from '../utils/examFormatters'
 
 interface EyeResultCardProps {
   readonly eyeCode: 'OD' | 'OS'
   readonly eyeLabel: '右眼' | '左眼'
   readonly result: EyeRefraction
-}
-
-function formatDiopter(value: number): string {
-  if (!Number.isFinite(value)) {
-    return '—'
-  }
-
-  const normalizedValue = Object.is(value, -0) ? 0 : value
-  const sign = normalizedValue > 0 ? '+' : normalizedValue < 0 ? '-' : ''
-
-  return `${sign}${Math.abs(normalizedValue).toFixed(2)} D`
-}
-
-function formatAxis(value: number): string {
-  if (!Number.isFinite(value)) {
-    return '—'
-  }
-
-  const normalizedValue = Object.is(value, -0) ? 0 : value
-  const formattedValue = new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    useGrouping: false,
-  }).format(normalizedValue)
-
-  return `${formattedValue}°`
 }
 
 export function EyeResultCard({

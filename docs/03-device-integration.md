@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 当前产品阶段：网页 Demo。
-- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter` 和注入式 `ExamService`；首页、检测页与结果页已通过应用级共享依赖接入两者。
+- 当前代码状态：已实现遵守统一契约的 `MockDeviceAdapter` 和注入式 `ExamService`；首页、检测页、结果页与报告页已通过应用级共享依赖接入两者。
 - 真实设备：未接入。
 - 厂家接口资料：尚未取得。
 - 17 项正式字段定义：尚未取得。
@@ -19,9 +19,9 @@
 ## V0.1 Mock Device 实现
 
 ```text
-当前页面：HomePage / ExamPage / ResultPage → ExamService → DeviceAdapter → MockDeviceAdapter
+当前页面：HomePage / ExamPage / ResultPage / ReportPage → ExamService → DeviceAdapter → MockDeviceAdapter
 
-当前测试：HomePage / ExamPage / ResultPage / ExamService → DeviceAdapter → MockDeviceAdapter
+当前测试：HomePage / ExamPage / ResultPage / ReportPage / ExamService → DeviceAdapter → MockDeviceAdapter
 ```
 
 实现位于 `src/services/device/MockDeviceAdapter.ts`，测试位于 `src/services/device/MockDeviceAdapter.test.ts`。该类是纯内存 Demo 实现，不调用厂家 SDK、API、DLL、通信协议或真实硬件，也不代表真实设备能力。
@@ -92,7 +92,7 @@ Mock 数据规则：
 - `ExamResult.source` 固定为 `mock`。
 - 原始模拟返回保留在 `rawData`，其内部同样包含 `source: mock` 和 `demo: true`，只用于调试与未来映射验证；普通 UI 不得依赖其内部结构。
 
-检测完成后，ExamPage 只把 Adapter 返回的不透明 `examId` 传入 `/results/:examId`。ResultPage 通过共享 `ExamService.getExamResult(examId)` 读取标准结果，并直接遍历 `ExamResult.metrics`；页面不访问 `MockDeviceAdapter`，也不读取 `rawData`。Mock 内存记录不存在或检测尚未完成时，Adapter 按既有契约拒绝读取，结果页显示错误而不是生成替代数据。
+检测完成后，ExamPage 只把 Adapter 返回的不透明 `examId` 传入 `/results/:examId`，ResultPage 再把同一标识传入 `/report/:examId`。ResultPage 与 ReportPage 都通过共享 `ExamService.getExamResult(examId)` 读取标准结果，并直接遍历 `ExamResult.metrics`；页面不访问 `MockDeviceAdapter`，也不读取 `rawData`。Mock 内存记录不存在或检测尚未完成时，Adapter 按既有契约拒绝读取，两个页面均显示明确错误而不是生成替代数据。报告打印只是浏览器 UI 行为，不改变 DeviceAdapter 契约或 Mock 数据结构。
 
 ## 获取厂家资料后的接入步骤
 
